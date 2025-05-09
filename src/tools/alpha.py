@@ -1,9 +1,17 @@
+from logging import getLogger
 from typing import Any, Dict
 
 import httpx
 from pydantic import ValidationError
 
-from src.tools._alpha import BalanceSheetResponse, CashFlowResponse, EarningsResponse
+from src.tools._alpha import (
+    BalanceSheetResponse,
+    CashFlowResponse,
+    EarningsResponse,
+    TickerData,
+)
+
+logger = getLogger(__name__)
 
 
 class AlphaVantageClient:
@@ -13,18 +21,33 @@ class AlphaVantageClient:
 
     BASE_URL = "https://www.alphavantage.co/query"
 
-    def __init__(self, api_key: str, timeout: int = 10):
+    def __init__(self, api_key: str = "demo", timeout: int = 10):
         self.api_key = api_key
         self.timeout = timeout
+        self.memory: Dict[str, TickerData] = {}
+
+    def get_ticker_data(self, symbol: str) -> TickerData:
+        if symbol not in self.memory:
+            logger.info(f"Fetching data for {symbol}")
+            data = TickerData(
+                symbol=symbol,
+                balance_sheet=self.get_balance_sheet(symbol),
+                cash_flow=self.get_cashflow(symbol),
+                earnings=self.get_earnings(symbol),
+            )
+            self.memory[symbol] = data
+ 
+        else:
+            logger.info(f"Using cached data for {symbol}")
+            data = self.memory[symbol]
+
+        return data
 
     def _fetch(self, function: str, symbol: str) -> Dict[str, Any]:
         params = {"function": function, "symbol": symbol, "apikey": self.api_key}
         response = httpx.get(self.BASE_URL, params=params, timeout=self.timeout)
         response.raise_for_status()
         data = response.json()
-        if isinstance(data, dict) and ("Information" in data or "Note" in data):
-            msg = data.get("Information") or data.get("Note")
-            raise RuntimeError(f"Alpha Vantage API error: {msg}")
         return data
 
     def get_earnings(self, symbol: str) -> "EarningsResponse":
@@ -50,7 +73,7 @@ class AlphaVantageClient:
 
 
 if __name__ == "__main__":
-    client = AlphaVantageClient(api_key="demo")
+    client = AlphaVantageClient()
 
     # Earnings example
     print("Annual and Quarterly Earnings for IBM:")
