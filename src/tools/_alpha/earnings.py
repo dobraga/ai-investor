@@ -14,20 +14,46 @@ class AnnualEarning(BaseModel):
         description="Fiscal date ending in YYYY-MM-DD format",
     )
     reported_eps: float = Field(
-        ..., alias="reportedEPS", description="Reported earnings per share"
+        ...,
+        alias="reportedEPS",
+        description="Reported earnings per share",
     )
 
 
 class QuarterlyEarning(BaseModel):
     model_config = ConfigDict(populate_by_name=True, validate_by_alias=True)
 
-    fiscal_date_ending: str = Field(alias="fiscalDateEnding")
-    reported_date: str = Field(alias="reportedDate")
-    reported_eps: Optional[float] = Field(alias="reportedEPS")
-    estimated_eps: Optional[float] = Field(alias="estimatedEPS")
-    surprise: Optional[float] = Field(alias="surprise")
-    surprise_percentage: Optional[float] = Field(alias="surprisePercentage")
-    report_time: Literal["pre-market", "post-market"] = Field(alias="reportTime")
+    fiscal_date_ending: str = Field(
+        ...,
+        alias="fiscalDateEnding",
+        description="Fiscal date ending in YYYY-MM-DD format",
+    )
+    reported_date: str = Field(
+        ..., alias="reportedDate", description="Date the earnings were reported"
+    )
+    reported_eps: Optional[float] = Field(
+        None,
+        alias="reportedEPS",
+        description="Actual earnings per share reported",
+    )
+    estimated_eps: Optional[float] = Field(
+        None,
+        alias="estimatedEPS",
+        description="Estimated earnings per share",
+    )
+    surprise: Optional[float] = Field(
+        None,
+        alias="surprise",
+        description="Difference between reported EPS and estimated EPS",
+    )
+    surprise_percentage: Optional[float] = Field(
+        None,
+        alias="surprisePercentage",
+        description="Percentage difference between reported EPS and estimate",
+    )
+    report_time: Literal["pre-market", "post-market"] = Field(
+        ..., alias="reportTime", description="Time of day the earnings were reported"
+    )
 
     @field_validator(
         "reported_eps",
@@ -44,5 +70,9 @@ class QuarterlyEarning(BaseModel):
 class EarningsResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True, validate_by_alias=True)
 
-    annual_earnings: List[AnnualEarning] = Field(alias="annualEarnings")
-    quarterly_earnings: List[QuarterlyEarning] = Field(alias="quarterlyEarnings")
+    annual_earnings: List[AnnualEarning] = Field(
+        ..., alias="annualEarnings", description="List of annual earnings reports"
+    )
+    quarterly_earnings: List[QuarterlyEarning] = Field(
+        ..., alias="quarterlyEarnings", description="List of quarterly earnings reports"
+    )
