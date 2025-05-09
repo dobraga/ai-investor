@@ -23,8 +23,8 @@ def test_parse_earnings(client, alpha_data_dir):
     data = EarningsResponse(**data)
     assert isinstance(data, EarningsResponse)
 
-    assert len(data.annualEarnings) > 0
-    assert len(data.quarterlyEarnings) > 0
+    assert len(data.annual_earnings) > 0
+    assert len(data.quarterly_earnings) > 0
 
 
 def test_parse_balance_sheet(client, alpha_data_dir):
