@@ -1,31 +1,12 @@
-I want to create a system prompt (pass data in second stage) to use create a Warren Buffet stock analysis, using information above:
+I want to create a system prompt (pass data in second stage) to create a Cathie Wood stock analysis, using information above:
 
-Sector: The sector the company belongs to. (Helps understand the industry landscape and risks).
-Industry: The industry the company belongs to. (Crucial for Buffett, who invests in businesses he understands).
-Description: A brief description of the company's business. (Provides insight into the core operations).
-Country: The country where the company is based. (Relevant for geographic risk and market understanding).
-Return on Equity (TTM): Net income divided by shareholder equity over the trailing twelve months. Buffett looks for companies that consistently earn a high return on shareholders' capital, indicating a strong competitive advantage.
-Return on Assets (TTM): Net income divided by total assets over the trailing twelve months. Indicates how efficiently the company uses its assets to generate profits. A high ROA suggests efficient operations.
-Profit Margin (TTM): Net income divided by revenue over the trailing twelve months. Represents the percentage of revenue left after all expenses. A high and stable profit margin can indicate pricing power or efficient cost management.
-Operating Margin (TTM): Operating income divided by revenue over the trailing twelve months. Shows profitability from core operations before accounting for interest and taxes.
-Total Debt (Latest Annual): Sum of long-term non-current and short-term debt from the latest annual balance sheet. Buffett prefers companies with manageable or low debt levels, as excessive debt can pose significant risks.
-Debt to Equity Ratio (Latest Annual): Total Debt divided by Shareholder Equity. A key measure of financial leverage. A lower ratio generally indicates less risk and a healthier balance sheet, which is preferred by Buffett.
-Current Ratio (Latest Annual): Total Current Assets divided by Total Current Liabilities. Measures a company's ability to pay off its short-term obligations with its short-term assets. A ratio above 1 is generally considered healthy, indicating good liquidity.
-Retained Earnings (Latest Annual): Accumulated retained earnings from the latest annual balance sheet. Growth in retained earnings over time, especially when coupled with high returns on equity, can indicate successful reinvestment of profits and compounding value.
-Diluted EPS (TTM): Earnings per share on a diluted basis over the trailing twelve months. Buffett values consistent and growing earnings per share as a sign of a thriving business.
-Revenue (TTM): Total revenue over the trailing twelve months. Consistent revenue growth indicates increasing demand for the company's products or services.
-Quarterly Revenue Growth YoY: Year-over-year revenue growth percentage for the latest reported quarter. Provides insight into recent business momentum.
-Quarterly Earnings Growth YoY: Year-over-year earnings growth percentage for the latest reported quarter. Provides insight into recent profitability momentum.
-Latest Reported Quarterly EPS: The actual earnings per share reported for the latest quarter. The most recent snapshot of profitability per share.
-Trailing PE Ratio: Stock price divided by trailing twelve months earnings per share. A common valuation metric. Buffett emphasizes paying a reasonable price for a good business, meaning the PE should be considered relative to growth prospects and quality.
-Price to Book Ratio: Stock price divided by book value per share. Compares the market's valuation to the company's net asset value. Buffett famously used this in the past but focuses more on earning power now. Still useful for certain asset-heavy businesses.
-Price to Sales Ratio (TTM): Stock price divided by trailing twelve months revenue per share. Useful for valuing companies that may not have consistent positive earnings yet, or as a supplementary valuation tool.
-Free Cash Flow (Latest Annual): Operating Cash Flow minus Capital Expenditures from the latest annual report. This is arguably one of the most critical metrics for value investors like Buffett, as it represents the cash a company truly has available after maintaining and expanding its operations – cash that can be used for dividends, buybacks, debt reduction, or new investments.
-Dividend Yield: The annual dividend per share divided by the stock price. Indicates the income return provided by the dividend. While Buffett sometimes prefers companies reinvest earnings, a consistent dividend can signal financial health and a commitment to shareholders.
-Dividend Per Share: The total annual dividends declared per share. Shows the absolute amount of cash returned to shareholders per share.
-Market Capitalization: The total market value of the company's outstanding shares. Indicates the size of the company, which can influence liquidity and investment universe considerations.
+Growth Metrics: Cathie Wood heavily emphasizes top-line growth. QuarterlyRevenueGrowthYOY is a direct measure of recent growth momentum. QuarterlyEarningsGrowthYOY and DilutedEPSTTM indicate if that growth is translating towards profitability. RevenueTTM and GrossProfitTTM are included as foundational elements for margin calculations.
+Profitability and Efficiency: While she invests in companies potentially years away from significant profit, margins like GrossMarginTTM, OperatingMarginTTM, and ProfitMargin are crucial to understand the potential profitability as the company scales. ReturnOnEquityTTM and ReturnOnAssetsTTM show how effectively the company is currently using its capital, though these might be low or negative for early-stage growth companies.
+Cash Flow: Disruptive companies often burn cash before achieving profitability. OperatingCashFlow and CapitalExpenditures (used to derive FreeCashFlow) for the latest quarter and annual period are vital to understand the company's cash runway and ability to fund continued innovation and expansion. NetIncome from the cash flow statement is also included.
+Balance Sheet Strength: The balance sheet provides insight into the company's financial stability and ability to weather periods of cash burn. CashAndCashEquivalents and CashAndShortTermInvestments indicate immediate and short-term liquidity. TotalCurrentAssets, TotalCurrentLiabilities, and the derived CurrentRatio show the ability to meet short-term obligations. TotalDebtToEquity assesses the company's leverage, which is important for risk evaluation. Both quarterly and annual balance sheet metrics are included for a more complete picture.
+Valuation: For high-growth companies, traditional P/E ratios can be less meaningful if earnings are low or negative. Metrics like PriceToSalesRatioTTM, EVToRevenue, and EVToEBITDA are often more relevant as they relate market value to sales or operational cash flow before financing/accounting effects. ForwardPE and PEGRatio are included if the company has current or projected earnings that make these applicable. MarketCapitalization provides context for the company's size.
 
-1. In the final prompt list all metrics used with add a rule used to make a decision
+1. In the final prompt list all metrics used with add a rule used to make a decision (like Sell only if fundamentals deteriorate or valuation far exceeds intrinsic value)
 2. confidence(0-100) score
 3. ensure the prompt force to have reasoning for each point thats used to give a verdict
 4. a final verdict

@@ -1,11 +1,11 @@
-0. Get the principal metrics Warren Buffet uses to make a decision
+0. Get the principal metrics Cathie Wood uses to make a decision
 1. The most recent data is first element of lists.
 2. Only uses information on TickerData
 3. The python function need to receive TickerData
 4. The python function can have more config variables if needed
 
 Returns:
-1. a python code to get or create all information used to make a decision and returns a dict
+1. a python code (without dataclasses) to get or create all information used to make a decision and returns a dict
 2. list with metrics used with description
 
 
