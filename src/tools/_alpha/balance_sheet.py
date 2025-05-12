@@ -13,8 +13,9 @@ class AnnualBalanceSheetReport(BaseModel):
         alias="fiscalDateEnding",
         description="Date when the fiscal period ends, in YYYY-MM-DD format",
     )
-    reported_currency: str = Field(
-        ...,
+    # Changed to Optional[str] and default to None to handle "None" input
+    reported_currency: Optional[str] = Field(
+        None,
         alias="reportedCurrency",
         description="Currency in which figures are reported",
     )
@@ -162,6 +163,7 @@ class AnnualBalanceSheetReport(BaseModel):
     @field_validator("*", mode="before")
     @classmethod
     def _normalize_and_convert(cls, v: Any) -> Any:
+        """Converts the string 'None' to Python's None for all fields."""
         return convert_none_str_to_none(v)
 
 
@@ -173,8 +175,9 @@ class QuarterlyBalanceSheetReport(BaseModel):
         alias="fiscalDateEnding",
         description="Date when the fiscal period ends, in YYYY-MM-DD format",
     )
-    reported_currency: str = Field(
-        ...,
+    # Changed to Optional[str] and default to None to handle "None" input
+    reported_currency: Optional[str] = Field(
+        None,
         alias="reportedCurrency",
         description="Currency in which figures are reported",
     )
@@ -322,6 +325,7 @@ class QuarterlyBalanceSheetReport(BaseModel):
     @field_validator("*", mode="before")
     @classmethod
     def _normalize_and_convert(cls, v: Any) -> Any:
+        """Converts the string 'None' to Python's None for all fields."""
         return convert_none_str_to_none(v)
 
 
