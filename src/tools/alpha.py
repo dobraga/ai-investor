@@ -1,15 +1,19 @@
 from logging import getLogger
-from typing import Any, Dict
+from pathlib import Path
+from typing import Any, Dict, Optional
 
 import httpx
 from pydantic import ValidationError
 
+from src.config.alpha import AlphaVantageConfig
 from src.tools._alpha import (
     BalanceSheetResponse,
     CashFlowResponse,
     EarningsResponse,
+    OverviewResponse,
     TickerData,
 )
+from src.utils.datetime import seconds_since_creation
 
 logger = getLogger(__name__)
 
@@ -21,34 +25,51 @@ class AlphaVantageClient:
 
     BASE_URL = "https://www.alphavantage.co/query"
 
-    def __init__(self, api_key: str = "demo", timeout: int = 10):
+    def __init__(
+        self,
+        api_key: str = "demo",
+        config: Optional[AlphaVantageConfig] = AlphaVantageConfig(),
+    ):
         self.api_key = api_key
-        self.timeout = timeout
-        self.memory: Dict[str, TickerData] = {}
+        self.config = config
 
     def get_ticker_data(self, symbol: str) -> TickerData:
-        if symbol not in self.memory:
-            logger.info(f"Fetching data for {symbol}")
-            data = TickerData(
-                symbol=symbol,
-                balance_sheet=self.get_balance_sheet(symbol),
-                cash_flow=self.get_cashflow(symbol),
-                earnings=self.get_earnings(symbol),
-            )
-            self.memory[symbol] = data
- 
-        else:
-            logger.info(f"Using cached data for {symbol}")
-            data = self.memory[symbol]
+        cache_file = None
+        if self.config.cache_dir:
+            cache_file = self.config.cache_dir / f"{symbol}.json"
+
+        if (
+            cache_file
+            and cache_file.exists()
+            and seconds_since_creation(cache_file) < self.config.cache_timeout
+        ):
+            logger.debug(f"Using cached data for {symbol}")
+            return self.from_cache_file(cache_file)
+
+        data = TickerData(
+            overview=self.get_overview(symbol),
+            balance_sheet=self.get_balance_sheet(symbol),
+            cash_flow=self.get_cashflow(symbol),
+            earnings=self.get_earnings(symbol),
+        )
+        if cache_file:
+            data.to_json(cache_file)
 
         return data
 
     def _fetch(self, function: str, symbol: str) -> Dict[str, Any]:
         params = {"function": function, "symbol": symbol, "apikey": self.api_key}
-        response = httpx.get(self.BASE_URL, params=params, timeout=self.timeout)
+        response = httpx.get(self.BASE_URL, params=params, timeout=self.config.timeout)
         response.raise_for_status()
         data = response.json()
         return data
+
+    def get_overview(self, symbol: str) -> "OverviewResponse":
+        try:
+            data = self._fetch("OVERVIEW", symbol)
+            return OverviewResponse(**data)
+        except ValidationError as e:
+            raise RuntimeError(f"Overview data validation failed: {e}")
 
     def get_earnings(self, symbol: str) -> "EarningsResponse":
         try:
@@ -71,60 +92,40 @@ class AlphaVantageClient:
         except ValidationError as e:
             raise RuntimeError(f"Balance sheet data validation failed: {e}")
 
+    def from_cache_file(self, cache_file: Path) -> None:
+        return TickerData.from_json(cache_file.read_text())
+
 
 if __name__ == "__main__":
     client = AlphaVantageClient()
 
+    # Overview example
+    print("Overview for IBM:")
+    overview = client.get_overview("IBM")
+    print(overview.model_dump_json(indent=2))
+
     # Earnings example
-    print("Annual and Quarterly Earnings for IBM:")
-    try:
-        earnings = client.get_earnings("IBM")
-        for ann in earnings.annualEarnings:
-            print(f"  [Annual] {ann.fiscalDateEnding}: EPS = {ann.reportedEPS}")
-        for q in earnings.quarterlyEarnings[:2]:
-            print(
-                f"  [Quarterly] {q.fiscalDateEnding}: EPS = {q.reportedEPS}, estimate = {q.estimatedEPS}"
-            )
-    except RuntimeError as e:
-        print(f"API error fetching earnings: {e}")
-    except ValidationError as e:
-        print("Earnings validation error:")
-        print(e.json())
+    print("\n\nAnnual and Quarterly Earnings for IBM:")
+    earnings = client.get_earnings("IBM")
+    for ann in earnings.annual_earnings[-1:]:
+        print(ann.model_dump_json(indent=2))
+    for q in earnings.quarterly_earnings[-1:]:
+        print(f"  [Quarterly]\n{q.model_dump_json(indent=2)}")
 
     # Cash Flow example
-    print("\nLatest Annual and Quarterly Cash Flow for IBM:")
-    try:
-        cashflow = client.get_cashflow("IBM")
-        latest_cf = cashflow.annualReports[0]
-        print(
-            f"  [Annual] {latest_cf.fiscalDateEnding}: Operating CF = {latest_cf.operatingCashflow}, CapEx = {latest_cf.capitalExpenditures}"
-        )
-        if cashflow.quarterlyReports:
-            latest_qf = cashflow.quarterlyReports[0]
-            print(
-                f"  [Quarterly] {latest_qf.fiscalDateEnding}: Operating CF = {latest_qf.operatingCashflow}, CapEx = {latest_qf.capitalExpenditures}"
-            )
-    except RuntimeError as e:
-        print(f"API error fetching cash flow: {e}")
-    except ValidationError as e:
-        print("Cash Flow validation error:")
-        print(e.json())
+    print("\n\nLatest Annual and Quarterly Cash Flow for IBM:")
+    cashflow = client.get_cashflow("IBM")
+    latest_cf = cashflow.annual_reports[-1]
+    print(f"  [Annual]\n{latest_cf.model_dump_json(indent=2)}")
+    if cashflow.quarterly_reports:
+        latest_qf = cashflow.quarterly_reports[-1]
+        print(f"  [Quarterly]\n{latest_qf.model_dump_json(indent=2)}")
 
     # Balance Sheet example
-    print("\nLatest Annual and Quarterly Balance Sheet for IBM:")
-    try:
-        bs = client.get_balance_sheet("IBM")
-        ar = bs.annualReports[0]
-        print(
-            f"  [Annual] {ar.fiscalDateEnding}: Total Assets = {ar.totalAssets}, Total Liabilities = {ar.totalLiabilities}"
-        )
-        if bs.quarterlyReports:
-            qr = bs.quarterlyReports[0]
-            print(
-                f"  [Quarterly] {qr.fiscalDateEnding}: Total Assets = {qr.totalAssets}, Total Liabilities = {qr.totalLiabilities}"
-            )
-    except RuntimeError as e:
-        print(f"API error fetching balance sheet: {e}")
-    except ValidationError as e:
-        print("Balance Sheet validation error:")
-        print(e.json())
+    print("\n\nLatest Annual and Quarterly Balance Sheet for IBM:")
+    bs = client.get_balance_sheet("IBM")
+    ar = bs.annual_reports[-1]
+    print(f"  [Annual]\n{ar.model_dump_json(indent=2)}")
+    if bs.quarterly_reports:
+        qr = bs.quarterly_reports[-1]
+        print(f"  [Quarterly]\n{qr.model_dump_json(indent=2)}")
