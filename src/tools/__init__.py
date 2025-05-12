@@ -1,3 +1,3 @@
-from .alpha import AlphaVantageClient
+from .alpha import AlphaVantageClient, TickerData
 
-__all__ = ["AlphaVantageClient"]
+__all__ = ["AlphaVantageClient", "TickerData"]
