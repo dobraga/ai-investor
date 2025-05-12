@@ -1,0 +1,725 @@
+0. Get the principal metrics Warren Buffet uses to make a decision
+1. The most recent data is first element of lists.
+2. Only uses information on TickerData
+3. The python function need to receive TickerData
+4. The python function can have more config variables if needed
+
+Returns:
+1. a python code to get or create all information used to make a decision and returns a dict
+2. list with metrics used with description
+
+
+class TickerData(BaseModel):
+    overview: OverviewResponse
+    balance_sheet: BalanceSheetResponse
+    cash_flow: CashFlowResponse
+    earnings: EarningsResponse
+
+class OverviewResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, validate_by_alias=True)
+
+    name: str = Field(alias="Name", description="Company or asset name")
+    asset_type: Optional[str] = Field(
+        alias="AssetType", description="Type of the asset (e.g., Common Stock, ETF)"
+    )
+    exchange: Optional[str] = Field(
+        alias="Exchange", description="Stock exchange where the asset is listed"
+    )
+    currency: Optional[str] = Field(alias="Currency", description="Trading currency")
+    country: Optional[str] = Field(
+        alias="Country", description="Country where the company is based"
+    )
+    description: Optional[str] = Field(
+        alias="Description", description="Brief business summary or description"
+    )
+
+    two_hundred_day_moving_average: Optional[float] = Field(
+        alias="200DayMovingAverage", description="200-day moving average price"
+    )
+    fifty_day_moving_average: Optional[float] = Field(
+        alias="50DayMovingAverage", description="50-day moving average price"
+    )
+    fifty_two_week_high: Optional[float] = Field(
+        alias="52WeekHigh", description="Highest price in the last 52 weeks"
+    )
+    fifty_two_week_low: Optional[float] = Field(
+        alias="52WeekLow", description="Lowest price in the last 52 weeks"
+    )
+
+    market_capitalization: Optional[int] = Field(
+        alias="MarketCapitalization",
+        description="Total market value of all outstanding shares",
+    )
+    book_value: Optional[float] = Field(
+        alias="BookValue", description="Total assets minus liabilities per share"
+    )
+    price_to_book_ratio: Optional[float] = Field(
+        alias="PriceToBookRatio",
+        description="Market price divided by book value per share",
+    )
+    price_to_sales_ratio_ttm: Optional[float] = Field(
+        alias="PriceToSalesRatioTTM",
+        description="Market price divided by total revenue (TTM)",
+    )
+    pe_ratio: Optional[float] = Field(
+        alias="PERatio", description="Price-to-earnings ratio (TTM)"
+    )
+    forward_pe: Optional[float] = Field(
+        alias="ForwardPE",
+        description="Price-to-earnings ratio based on projected earnings",
+    )
+    trailing_pe: Optional[float] = Field(
+        alias="TrailingPE",
+        description="Price-to-earnings ratio based on previous earnings",
+    )
+    ev_to_revenue: Optional[float] = Field(
+        alias="EVToRevenue", description="Enterprise Value divided by revenue"
+    )
+    ev_to_ebitda: Optional[float] = Field(
+        alias="EVToEBITDA", description="Enterprise Value divided by EBITDA"
+    )
+    peg_ratio: Optional[float] = Field(
+        alias="PEGRatio", description="Price/Earnings to Growth ratio"
+    )
+    analyst_target_price: Optional[float] = Field(
+        alias="AnalystTargetPrice", description="Average price target by analysts"
+    )
+
+    return_on_assets_ttm: Optional[float] = Field(
+        alias="ReturnOnAssetsTTM", description="Return on assets (TTM)"
+    )
+    return_on_equity_ttm: Optional[float] = Field(
+        alias="ReturnOnEquityTTM", description="Return on equity (TTM)"
+    )
+    gross_profit_ttm: Optional[int] = Field(
+        alias="GrossProfitTTM", description="Gross profit (TTM)"
+    )
+    revenue_ttm: Optional[int] = Field(
+        alias="RevenueTTM", description="Total revenue (TTM)"
+    )
+    revenue_per_share_ttm: Optional[float] = Field(
+        alias="RevenuePerShareTTM", description="Revenue per outstanding share (TTM)"
+    )
+    ebitda: Optional[int] = Field(
+        alias="EBITDA",
+        description="Earnings Before Interest, Taxes, Depreciation, and Amortization",
+    )
+    operating_margin_ttm: Optional[float] = Field(
+        alias="OperatingMarginTTM",
+        description="Operating income as a percentage of revenue (TTM)",
+    )
+    profit_margin: Optional[float] = Field(
+        alias="ProfitMargin", description="Net profit as a percentage of revenue"
+    )
+
+    eps: Optional[float] = Field(alias="EPS", description="Earnings per share")
+    diluted_eps_ttm: Optional[float] = Field(
+        alias="DilutedEPSTTM", description="Earnings per share after dilution (TTM)"
+    )
+    dividend_yield: Optional[float] = Field(
+        alias="DividendYield", description="Annual dividend divided by share price"
+    )
+    dividend_per_share: Optional[float] = Field(
+        alias="DividendPerShare", description="Annual dividend amount per share"
+    )
+    dividend_date: Optional[date] = Field(
+        alias="DividendDate", description="Next dividend payment date"
+    )
+    ex_dividend_date: Optional[date] = Field(
+        alias="ExDividendDate",
+        description="Date on or after which a stock is traded without a dividend",
+    )
+
+    quarterly_earnings_growth_yoy: Optional[float] = Field(
+        alias="QuarterlyEarningsGrowthYOY",
+        description="Year-over-year earnings growth for the latest quarter",
+    )
+    quarterly_revenue_growth_yoy: Optional[float] = Field(
+        alias="QuarterlyRevenueGrowthYOY",
+        description="Year-over-year revenue growth for the latest quarter",
+    )
+    shares_outstanding: Optional[int] = Field(
+        alias="SharesOutstanding", description="Number of shares currently outstanding"
+    )
+
+    analyst_rating_strong_buy: Optional[int] = Field(
+        alias="AnalystRatingStrongBuy",
+        description="Number of analysts rating as Strong Buy",
+    )
+    analyst_rating_buy: Optional[int] = Field(
+        alias="AnalystRatingBuy", description="Number of analysts rating as Buy"
+    )
+    analyst_rating_hold: Optional[int] = Field(
+        alias="AnalystRatingHold", description="Number of analysts rating as Hold"
+    )
+    analyst_rating_sell: Optional[int] = Field(
+        alias="AnalystRatingSell", description="Number of analysts rating as Sell"
+    )
+    analyst_rating_strong_sell: Optional[int] = Field(
+        alias="AnalystRatingStrongSell",
+        description="Number of analysts rating as Strong Sell",
+    )
+
+    industry: Optional[str] = Field(
+        alias="Industry", description="Industry classification"
+    )
+    sector: Optional[str] = Field(alias="Sector", description="Sector classification")
+    fiscal_year_end: Optional[str] = Field(
+        alias="FiscalYearEnd", description="Company’s fiscal year end date"
+    )
+    latest_quarter: Optional[date] = Field(
+        alias="LatestQuarter", description="Date of the most recent fiscal quarter"
+    )
+    beta: Optional[float] = Field(
+        alias="Beta",
+        description="Stock volatility relative to the market (beta coefficient)",
+    )
+
+
+
+class AnnualBalanceSheetReport(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, validate_by_alias=True)
+
+    fiscal_date_ending: str = Field(
+        ...,
+        alias="fiscalDateEnding",
+        description="Date when the fiscal period ends, in YYYY-MM-DD format",
+    )
+    reported_currency: str = Field(
+        ...,
+        alias="reportedCurrency",
+        description="Currency in which figures are reported",
+    )
+    accumulated_depreciation_amortization_ppe: Optional[float] = Field(
+        None,
+        alias="accumulatedDepreciationAmortizationPPE",
+        description="Total accumulated depreciation and amortization of property, plant, and equipment",
+    )
+    capital_lease_obligations: Optional[float] = Field(
+        None,
+        alias="capitalLeaseObligations",
+        description="Outstanding obligations under capital leases",
+    )
+    cash_and_cash_equivalents_at_carrying_value: Optional[float] = Field(
+        None,
+        alias="cashAndCashEquivalentsAtCarryingValue",
+        description="Cash and cash equivalents at carrying value",
+    )
+    cash_and_short_term_investments: Optional[float] = Field(
+        None,
+        alias="cashAndShortTermInvestments",
+        description="Cash and short-term investments",
+    )
+    common_stock: Optional[float] = Field(
+        None, alias="commonStock", description="Value of common stock"
+    )
+    common_stock_shares_outstanding: Optional[float] = Field(
+        None,
+        alias="commonStockSharesOutstanding",
+        description="Number of outstanding shares of common stock",
+    )
+    current_accounts_payable: Optional[float] = Field(
+        None,
+        alias="currentAccountsPayable",
+        description="Accounts payable due within one year",
+    )
+    current_debt: Optional[float] = Field(
+        None, alias="currentDebt", description="Total debt due within one year"
+    )
+    current_long_term_debt: Optional[float] = Field(
+        None,
+        alias="currentLongTermDebt",
+        description="Portion of long-term debt due within one year",
+    )
+    current_net_receivables: Optional[float] = Field(
+        None,
+        alias="currentNetReceivables",
+        description="Net receivables expected to be collected within one year",
+    )
+    deferred_revenue: Optional[float] = Field(
+        None, alias="deferredRevenue", description="Revenue received but not yet earned"
+    )
+    goodwill: Optional[float] = Field(
+        None, alias="goodwill", description="Goodwill recorded from acquisitions"
+    )
+    intangible_assets: Optional[float] = Field(
+        None, alias="intangibleAssets", description="Total value of intangible assets"
+    )
+    intangible_assets_excluding_goodwill: Optional[float] = Field(
+        None,
+        alias="intangibleAssetsExcludingGoodwill",
+        description="Intangible assets excluding goodwill",
+    )
+    inventory: Optional[float] = Field(
+        None, alias="inventory", description="Value of inventory held"
+    )
+    investments: Optional[float] = Field(
+        None, alias="investments", description="Value of investments"
+    )
+    long_term_debt: Optional[float] = Field(
+        None, alias="longTermDebt", description="Total long-term debt"
+    )
+    long_term_debt_noncurrent: Optional[float] = Field(
+        None,
+        alias="longTermDebtNoncurrent",
+        description="Long-term debt not due within one year",
+    )
+    long_term_investments: Optional[float] = Field(
+        None,
+        alias="longTermInvestments",
+        description="Investments held for longer than one year",
+    )
+    other_current_assets: Optional[float] = Field(
+        None, alias="otherCurrentAssets", description="Other current assets"
+    )
+    other_current_liabilities: Optional[float] = Field(
+        None, alias="otherCurrentLiabilities", description="Other current liabilities"
+    )
+    other_non_current_assets: Optional[float] = Field(
+        None, alias="otherNonCurrentAssets", description="Other non-current assets"
+    )
+    other_non_current_liabilities: Optional[float] = Field(
+        None,
+        alias="otherNonCurrentLiabilities",
+        description="Other non-current liabilities",
+    )
+    property_plant_equipment: Optional[float] = Field(
+        None,
+        alias="propertyPlantEquipment",
+        description="Value of property, plant, and equipment",
+    )
+    retained_earnings: Optional[float] = Field(
+        None, alias="retainedEarnings", description="Accumulated retained earnings"
+    )
+    short_long_term_debt_total: Optional[float] = Field(
+        None,
+        alias="shortLongTermDebtTotal",
+        description="Total of short and long-term debt",
+    )
+    short_term_debt: Optional[float] = Field(
+        None, alias="shortTermDebt", description="Debt due within one year"
+    )
+    short_term_investments: Optional[float] = Field(
+        None,
+        alias="shortTermInvestments",
+        description="Investments held for less than one year",
+    )
+    total_assets: Optional[float] = Field(
+        None, alias="totalAssets", description="Total assets"
+    )
+    total_current_assets: Optional[float] = Field(
+        None, alias="totalCurrentAssets", description="Total current assets"
+    )
+    total_current_liabilities: Optional[float] = Field(
+        None, alias="totalCurrentLiabilities", description="Total current liabilities"
+    )
+    total_liabilities: Optional[float] = Field(
+        None, alias="totalLiabilities", description="Total liabilities"
+    )
+    total_non_current_assets: Optional[float] = Field(
+        None, alias="totalNonCurrentAssets", description="Total non-current assets"
+    )
+    total_non_current_liabilities: Optional[float] = Field(
+        None,
+        alias="totalNonCurrentLiabilities",
+        description="Total non-current liabilities",
+    )
+    total_shareholder_equity: Optional[float] = Field(
+        None, alias="totalShareholderEquity", description="Total shareholders' equity"
+    )
+    treasury_stock: Optional[float] = Field(
+        None, alias="treasuryStock", description="Value of treasury stock"
+    )
+
+
+class QuarterlyBalanceSheetReport(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, validate_by_alias=True)
+
+    fiscal_date_ending: str = Field(
+        ...,
+        alias="fiscalDateEnding",
+        description="Date when the fiscal period ends, in YYYY-MM-DD format",
+    )
+    reported_currency: str = Field(
+        ...,
+        alias="reportedCurrency",
+        description="Currency in which figures are reported",
+    )
+    accumulated_depreciation_amortization_ppe: Optional[float] = Field(
+        None,
+        alias="accumulatedDepreciationAmortizationPPE",
+        description="Total accumulated depreciation and amortization of property, plant, and equipment",
+    )
+    capital_lease_obligations: Optional[float] = Field(
+        None,
+        alias="capitalLeaseObligations",
+        description="Outstanding obligations under capital leases",
+    )
+    cash_and_cash_equivalents_at_carrying_value: Optional[float] = Field(
+        None,
+        alias="cashAndCashEquivalentsAtCarryingValue",
+        description="Cash and cash equivalents at carrying value",
+    )
+    cash_and_short_term_investments: Optional[float] = Field(
+        None,
+        alias="cashAndShortTermInvestments",
+        description="Cash and short-term investments",
+    )
+    common_stock: Optional[float] = Field(
+        None, alias="commonStock", description="Value of common stock"
+    )
+    common_stock_shares_outstanding: Optional[float] = Field(
+        None,
+        alias="commonStockSharesOutstanding",
+        description="Number of outstanding shares of common stock",
+    )
+    current_accounts_payable: Optional[float] = Field(
+        None,
+        alias="currentAccountsPayable",
+        description="Accounts payable due within one year",
+    )
+    current_debt: Optional[float] = Field(
+        None, alias="currentDebt", description="Total debt due within one year"
+    )
+    current_long_term_debt: Optional[float] = Field(
+        None,
+        alias="currentLongTermDebt",
+        description="Portion of long-term debt due within one year",
+    )
+    current_net_receivables: Optional[float] = Field(
+        None,
+        alias="currentNetReceivables",
+        description="Net receivables expected to be collected within one year",
+    )
+    deferred_revenue: Optional[float] = Field(
+        None, alias="deferredRevenue", description="Revenue received but not yet earned"
+    )
+    goodwill: Optional[float] = Field(
+        None, alias="goodwill", description="Goodwill recorded from acquisitions"
+    )
+    intangible_assets: Optional[float] = Field(
+        None, alias="intangibleAssets", description="Total value of intangible assets"
+    )
+    intangible_assets_excluding_goodwill: Optional[float] = Field(
+        None,
+        alias="intangibleAssetsExcludingGoodwill",
+        description="Intangible assets excluding goodwill",
+    )
+    inventory: Optional[float] = Field(
+        None, alias="inventory", description="Value of inventory held"
+    )
+    investments: Optional[float] = Field(
+        None, alias="investments", description="Value of investments"
+    )
+    long_term_debt: Optional[float] = Field(
+        None, alias="longTermDebt", description="Total long-term debt"
+    )
+    long_term_debt_noncurrent: Optional[float] = Field(
+        None,
+        alias="longTermDebtNoncurrent",
+        description="Long-term debt not due within one year",
+    )
+    long_term_investments: Optional[float] = Field(
+        None,
+        alias="longTermInvestments",
+        description="Investments held for longer than one year",
+    )
+    other_current_assets: Optional[float] = Field(
+        None, alias="otherCurrentAssets", description="Other current assets"
+    )
+    other_current_liabilities: Optional[float] = Field(
+        None, alias="otherCurrentLiabilities", description="Other current liabilities"
+    )
+    other_non_current_assets: Optional[float] = Field(
+        None, alias="otherNonCurrentAssets", description="Other non-current assets"
+    )
+    other_non_current_liabilities: Optional[float] = Field(
+        None,
+        alias="otherNonCurrentLiabilities",
+        description="Other non-current liabilities",
+    )
+    property_plant_equipment: Optional[float] = Field(
+        None,
+        alias="propertyPlantEquipment",
+        description="Value of property, plant, and equipment",
+    )
+    retained_earnings: Optional[float] = Field(
+        None, alias="retainedEarnings", description="Accumulated retained earnings"
+    )
+    short_long_term_debt_total: Optional[float] = Field(
+        None,
+        alias="shortLongTermDebtTotal",
+        description="Total of short and long-term debt",
+    )
+    short_term_debt: Optional[float] = Field(
+        None, alias="shortTermDebt", description="Debt due within one year"
+    )
+    short_term_investments: Optional[float] = Field(
+        None,
+        alias="shortTermInvestments",
+        description="Investments held for less than one year",
+    )
+    total_assets: Optional[float] = Field(
+        None, alias="totalAssets", description="Total assets"
+    )
+    total_current_assets: Optional[float] = Field(
+        None, alias="totalCurrentAssets", description="Total current assets"
+    )
+    total_current_liabilities: Optional[float] = Field(
+        None, alias="totalCurrentLiabilities", description="Total current liabilities"
+    )
+    total_liabilities: Optional[float] = Field(
+        None, alias="totalLiabilities", description="Total liabilities"
+    )
+    total_non_current_assets: Optional[float] = Field(
+        None, alias="totalNonCurrentAssets", description="Total non-current assets"
+    )
+    total_non_current_liabilities: Optional[float] = Field(
+        None,
+        alias="totalNonCurrentLiabilities",
+        description="Total non-current liabilities",
+    )
+    total_shareholder_equity: Optional[float] = Field(
+        None, alias="totalShareholderEquity", description="Total shareholders' equity"
+    )
+    treasury_stock: Optional[float] = Field(
+        None, alias="treasuryStock", description="Value of treasury stock"
+    )
+
+class BalanceSheetResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, validate_by_alias=True)
+
+    annual_reports: List[AnnualBalanceSheetReport] = Field(
+        ..., alias="annualReports", description="List of annual balance sheet reports"
+    )
+    quarterly_reports: List[QuarterlyBalanceSheetReport] = Field(
+        ...,
+        alias="quarterlyReports",
+        description="List of quarterly balance sheet reports",
+    )
+
+
+class AnnualCashFlowReport(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, validate_by_alias=True)
+
+    fiscal_date_ending: str = Field(
+        alias="fiscalDateEnding",
+        description="The end date of the fiscal period for the report.",
+    )
+    reported_currency: str = Field(
+        alias="reportedCurrency",
+        description="The currency in which the financial figures are reported.",
+    )
+    capital_expenditures: Optional[float] = Field(
+        alias="capitalExpenditures",
+        description="Funds used by the company to acquire or upgrade physical assets such as property, industrial buildings, or equipment.",
+    )
+    cashflow_from_financing: Optional[float] = Field(
+        alias="cashflowFromFinancing",
+        description="Net cash generated from financing activities, including debt issuance, equity issuance, and dividend payments.",
+    )
+    cashflow_from_investment: Optional[float] = Field(
+        alias="cashflowFromInvestment",
+        description="Net cash used in investing activities, such as the purchase or sale of assets and investments.",
+    )
+    change_in_cash_and_cash_equivalents: Optional[float] = Field(
+        alias="changeInCashAndCashEquivalents",
+        description="The net change in cash and cash equivalents over the reporting period.",
+    )
+    change_in_exchange_rate: Optional[float] = Field(
+        alias="changeInExchangeRate",
+        description="The effect of exchange rate changes on cash and cash equivalents.",
+    )
+    change_in_inventory: Optional[float] = Field(
+        alias="changeInInventory",
+        description="The net change in inventory levels during the reporting period.",
+    )
+    change_in_operating_assets: Optional[float] = Field(
+        alias="changeInOperatingAssets",
+        description="The net change in operating assets, excluding cash, during the reporting period.",
+    )
+    change_in_operating_liabilities: Optional[float] = Field(
+        alias="changeInOperatingLiabilities",
+        description="The net change in operating liabilities during the reporting period.",
+    )
+    change_in_receivables: Optional[float] = Field(
+        alias="changeInReceivables",
+        description="The net change in accounts receivable during the reporting period.",
+    )
+    depreciation_depletion_and_amortization: Optional[float] = Field(
+        alias="depreciationDepletionAndAmortization",
+        description="Non-cash expenses that reduce the value of the company's assets over time.",
+    )
+    dividend_payout: Optional[float] = Field(
+        alias="dividendPayout",
+        description="Total dividends paid to shareholders during the reporting period.",
+    )
+    dividend_payout_common_stock: Optional[float] = Field(
+        alias="dividendPayoutCommonStock",
+        description="Dividends paid to holders of common stock.",
+    )
+    dividend_payout_preferred_stock: Optional[float] = Field(
+        alias="dividendPayoutPreferredStock",
+        description="Dividends paid to holders of preferred stock.",
+    )
+    net_income: Optional[float] = Field(
+        alias="netIncome",
+        description="The company's total earnings, calculated as revenue minus expenses, taxes, and costs.",
+    )
+    operating_cashflow: Optional[float] = Field(
+        alias="operatingCashflow",
+        description="Cash generated from the company's core business operations.",
+    )
+    profit_loss: Optional[float] = Field(
+        alias="profitLoss", description="Net profit or loss for the reporting period."
+    )
+
+
+class QuarterlyCashFlowReport(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, validate_by_alias=True)
+
+    fiscal_date_ending: str = Field(
+        alias="fiscalDateEnding",
+        description="The end date of the fiscal quarter for the report.",
+    )
+    reported_currency: str = Field(
+        alias="reportedCurrency",
+        description="The currency in which the financial figures are reported.",
+    )
+    capital_expenditures: Optional[float] = Field(
+        alias="capitalExpenditures",
+        description="Funds used by the company to acquire or upgrade physical assets such as property, industrial buildings, or equipment.",
+    )
+    cashflow_from_financing: Optional[float] = Field(
+        alias="cashflowFromFinancing",
+        description="Net cash generated from financing activities, including debt issuance, equity issuance, and dividend payments.",
+    )
+    cashflow_from_investment: Optional[float] = Field(
+        alias="cashflowFromInvestment",
+        description="Net cash used in investing activities, such as the purchase or sale of assets and investments.",
+    )
+    change_in_cash_and_cash_equivalents: Optional[float] = Field(
+        alias="changeInCashAndCashEquivalents",
+        description="The net change in cash and cash equivalents over the reporting period.",
+    )
+    change_in_exchange_rate: Optional[float] = Field(
+        alias="changeInExchangeRate",
+        description="The effect of exchange rate changes on cash and cash equivalents.",
+    )
+    change_in_inventory: Optional[float] = Field(
+        alias="changeInInventory",
+        description="The net change in inventory levels during the reporting period.",
+    )
+    change_in_operating_assets: Optional[float] = Field(
+        alias="changeInOperatingAssets",
+        description="The net change in operating assets, excluding cash, during the reporting period.",
+    )
+    change_in_operating_liabilities: Optional[float] = Field(
+        alias="changeInOperatingLiabilities",
+        description="The net change in operating liabilities during the reporting period.",
+    )
+    change_in_receivables: Optional[float] = Field(
+        alias="changeInReceivables",
+        description="The net change in accounts receivable during the reporting period.",
+    )
+    depreciation_depletion_and_amortization: Optional[float] = Field(
+        alias="depreciationDepletionAndAmortization",
+        description="Non-cash expenses that reduce the value of the company's assets over time.",
+    )
+    dividend_payout: Optional[float] = Field(
+        alias="dividendPayout",
+        description="Total dividends paid to shareholders during the reporting period.",
+    )
+    dividend_payout_common_stock: Optional[float] = Field(
+        alias="dividendPayoutCommonStock",
+        description="Dividends paid to holders of common stock.",
+    )
+    dividend_payout_preferred_stock: Optional[float] = Field(
+        alias="dividendPayoutPreferredStock",
+        description="Dividends paid to holders of preferred stock.",
+    )
+    net_income: Optional[float] = Field(
+        alias="netIncome",
+        description="The company's total earnings, calculated as revenue minus expenses, taxes, and costs.",
+    )
+    operating_cashflow: Optional[float] = Field(
+        alias="operatingCashflow",
+        description="Cash generated from the company's core business operations.",
+    )
+    profit_loss: Optional[float] = Field(
+        alias="profitLoss", description="Net profit or loss for the reporting period."
+    )
+
+
+class CashFlowResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, validate_by_alias=True)
+
+    annual_reports: List[AnnualCashFlowReport] = Field(
+        alias="annualReports", description="A list of annual cash flow reports."
+    )
+    quarterly_reports: Optional[List[QuarterlyCashFlowReport]] = Field(
+        alias="quarterlyReports", description="A list of quarterly cash flow reports."
+    )
+
+
+
+class AnnualEarning(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, validate_by_alias=True)
+
+    fiscal_date_ending: str = Field(
+        ...,
+        alias="fiscalDateEnding",
+        description="Fiscal date ending in YYYY-MM-DD format",
+    )
+    reported_eps: float = Field(
+        ...,
+        alias="reportedEPS",
+        description="Reported earnings per share",
+    )
+
+
+class QuarterlyEarning(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, validate_by_alias=True)
+
+    fiscal_date_ending: str = Field(
+        ...,
+        alias="fiscalDateEnding",
+        description="Fiscal date ending in YYYY-MM-DD format",
+    )
+    reported_date: str = Field(
+        ..., alias="reportedDate", description="Date the earnings were reported"
+    )
+    reported_eps: Optional[float] = Field(
+        None,
+        alias="reportedEPS",
+        description="Actual earnings per share reported",
+    )
+    estimated_eps: Optional[float] = Field(
+        None,
+        alias="estimatedEPS",
+        description="Estimated earnings per share",
+    )
+    surprise: Optional[float] = Field(
+        None,
+        alias="surprise",
+        description="Difference between reported EPS and estimated EPS",
+    )
+    surprise_percentage: Optional[float] = Field(
+        None,
+        alias="surprisePercentage",
+        description="Percentage difference between reported EPS and estimate",
+    )
+    report_time: Literal["pre-market", "post-market"] = Field(
+        ..., alias="reportTime", description="Time of day the earnings were reported"
+    )
+
+
+class EarningsResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, validate_by_alias=True)
+
+    annual_earnings: List[AnnualEarning] = Field(
+        ..., alias="annualEarnings", description="List of annual earnings reports"
+    )
+    quarterly_earnings: List[QuarterlyEarning] = Field(
+        ..., alias="quarterlyEarnings", description="List of quarterly earnings reports"
+    )
