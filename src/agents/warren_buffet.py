@@ -197,6 +197,7 @@ When presented with stock data in a user prompt, you must:
 if __name__ == "__main__":
     import asyncio
     from logging import basicConfig
+    from os import environ
 
     from dotenv import load_dotenv
     from llama_index.core.workflow import StartEvent, StopEvent, Workflow, step
@@ -212,14 +213,16 @@ if __name__ == "__main__":
         @step
         async def warren_buffett(self, ctx: Context, ev: StartEvent) -> StopEvent:
             await ctx.set("llm", llm)
-            await ctx.set("alpha_vantage_client", AlphaVantageClient("demo"))
+            await ctx.set(
+                "alpha_vantage_client", AlphaVantageClient(environ["ALPHA_VANTAGE"])
+            )
             await ctx.set("tickers", [ev.ticker])
             result = await warren_buffett_agent(ctx)
             return StopEvent(result=result)
 
     async def run():
         wf = MockWarrenBuffetWorkflow()
-        result = await wf.run(ticker="IBM")
+        result = await wf.run(ticker="META")
         return result
 
     result = asyncio.run(run())
