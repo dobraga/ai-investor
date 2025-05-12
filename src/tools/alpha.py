@@ -1,3 +1,4 @@
+from json import dumps
 from logging import getLogger
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -69,28 +70,42 @@ class AlphaVantageClient:
             data = self._fetch("OVERVIEW", symbol)
             return OverviewResponse(**data)
         except ValidationError as e:
-            raise RuntimeError(f"Overview data validation failed: {e}")
+            if self.config.cache_dir:
+                cache_json = self.config.cache_dir / f"overview_{symbol}.json"
+                cache_json.write_text(dumps(data, indent=2))
+            raise RuntimeError(f"Overview data validation failed: {e.json(indent=2)}")
 
     def get_earnings(self, symbol: str) -> "EarningsResponse":
         try:
             data = self._fetch("EARNINGS", symbol)
             return EarningsResponse(**data)
         except ValidationError as e:
-            raise RuntimeError(f"Earnings data validation failed: {e}")
+            if self.config.cache_dir:
+                cache_json = self.config.cache_dir / f"earnings_{symbol}.json"
+                cache_json.write_text(dumps(data, indent=2))
+            raise RuntimeError(f"Earnings data validation failed: {e.json(indent=2)}")
 
     def get_cashflow(self, symbol: str) -> "CashFlowResponse":
         try:
             data = self._fetch("CASH_FLOW", symbol)
             return CashFlowResponse(**data)
         except ValidationError as e:
-            raise RuntimeError(f"Cash flow data validation failed: {e}")
+            if self.config.cache_dir:
+                cache_json = self.config.cache_dir / f"cash_flow_{symbol}.json"
+                cache_json.write_text(dumps(data, indent=2))
+            raise RuntimeError(f"Cash flow data validation failed: {e.json(indent=2)}")
 
     def get_balance_sheet(self, symbol: str) -> "BalanceSheetResponse":
         try:
             data = self._fetch("BALANCE_SHEET", symbol)
             return BalanceSheetResponse(**data)
         except ValidationError as e:
-            raise RuntimeError(f"Balance sheet data validation failed: {e}")
+            if self.config.cache_dir:
+                cache_json = self.config.cache_dir / f"balance_sheet_{symbol}.json"
+                cache_json.write_text(dumps(data, indent=2))
+            raise RuntimeError(
+                f"Balance sheet data validation failed: {e.json(indent=2)}"
+            )
 
     def from_cache_file(self, cache_file: Path) -> None:
         return TickerData.from_json(cache_file.read_text())
