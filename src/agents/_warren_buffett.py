@@ -1,33 +1,37 @@
+from logging import getLogger
+from pathlib import Path
 from typing import Any, Dict
 
 from llama_index.core.llms import ChatMessage, MessageRole
 from llama_index.core.workflow import Context
 
-from src.agents._signal import SignalAnalysis
+from src.agents._signal import SignalEvent
 from src.tools import AlphaVantageClient, TickerData
-from src.utils.context import append
+from src.utils.format import id_to_name
+
+ID = Path(__file__).stem
+NAME = id_to_name(ID)
+LOG = getLogger(__name__)
 
 
 async def warren_buffett_agent(context: Context):
-    llm = await context.get("llm")
-    llm = llm.as_structured_llm(SignalAnalysis)
-    tickers: list[str] = await context.get("tickers")
+    ticker: str = await context.get("ticker")
+
+    LOG.info(f"Running {NAME} agent {ticker}")
+    llm = await context.get("llm_struct")
     client: AlphaVantageClient = await context.get("alpha_vantage_client")
 
-    for ticker in tickers:
-        data = client.get_ticker_data(ticker)
+    data = client.get_ticker_data(ticker)
 
-        metrics = compute_warren_buffett_metrics(data)
-        analysis = generate_warren_buffett_output(llm, metrics)
+    metrics = compute_metrics(data)
+    analysis = generate_output(llm, metrics)
 
-        key_analysis = f"warren_buffet_analysis_{ticker}"
-        await context.set(key_analysis, analysis)
-        await append(context, "all_analyses", analysis)
+    LOG.info(f"Finished {NAME} agent {ticker}")
 
     return analysis
 
 
-def compute_warren_buffett_metrics(ticker_data: TickerData) -> Dict[str, Any]:
+def compute_metrics(ticker_data: TickerData) -> Dict[str, Any]:
     """
     Extracts and calculates key financial metrics aligned with Warren Buffett's
     investment philosophy from TickerData, returning only the metric values in a dictionary.
@@ -136,18 +140,20 @@ def compute_warren_buffett_metrics(ticker_data: TickerData) -> Dict[str, Any]:
     return metrics_dict
 
 
-def generate_warren_buffett_output(llm, metrics: dict) -> SignalAnalysis:
-    message = f"Based on the following data, create the investment signal as Warren Buffett would. Analysis Data: {metrics}"
+def generate_output(llm, metrics: dict) -> SignalEvent:
+    message = f"Based on the following data, create the investment signal. Analysis Data: {metrics}"
 
     chat = [
-        ChatMessage.from_str(BUFFETT_PROMPT, MessageRole.SYSTEM),
+        ChatMessage.from_str(PROMPT, MessageRole.SYSTEM),
         ChatMessage.from_str(message, MessageRole.USER),
     ]
 
-    return llm.chat(chat).raw
+    response: SignalEvent = llm.chat(chat).raw
+    response.agent = NAME
+    return response
 
 
-BUFFETT_PROMPT = """
+PROMPT = """
 You are an expert financial analyst specialized in applying the investment philosophy and criteria of Warren Buffett. Your task is to analyze a given set of stock financial metrics and provide a structured assessment based purely on those metrics and the provided definitions, as if evaluating the company for a long-term, value-oriented investment in the style of Berkshire Hathaway.
 
 When presented with stock data in a user prompt, you must:
@@ -208,20 +214,21 @@ if __name__ == "__main__":
     basicConfig(level="INFO")
 
     llm = GoogleGenAI(model="gemini-2.0-flash")
+    llm = llm.as_structured_llm(SignalEvent)
 
-    class MockWarrenBuffetWorkflow(Workflow):
+    class MockWorkflow(Workflow):
         @step
-        async def warren_buffett(self, ctx: Context, ev: StartEvent) -> StopEvent:
-            await ctx.set("llm", llm)
+        async def agent(self, ctx: Context, ev: StartEvent) -> StopEvent:
+            await ctx.set("llm_struct", llm)
             await ctx.set(
                 "alpha_vantage_client", AlphaVantageClient(environ["ALPHA_VANTAGE"])
             )
-            await ctx.set("tickers", [ev.ticker])
+            await ctx.set("ticker", ev.ticker)
             result = await warren_buffett_agent(ctx)
             return StopEvent(result=result)
 
     async def run():
-        wf = MockWarrenBuffetWorkflow()
+        wf = MockWorkflow()
         result = await wf.run(ticker="META")
         return result
 

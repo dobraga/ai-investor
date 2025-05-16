@@ -1,33 +1,38 @@
+from logging import getLogger
+from pathlib import Path
 from typing import Any, Dict
 
 from llama_index.core.llms import ChatMessage, MessageRole
 from llama_index.core.workflow import Context
 
-from src.agents._signal import SignalAnalysis
+from src.agents._signal import SignalEvent
 from src.tools import AlphaVantageClient, TickerData
-from src.utils.context import append
+from src.utils.format import id_to_name
+
+ID = Path(__file__).stem
+NAME = id_to_name(ID)
+LOG = getLogger(__name__)
 
 
 async def cathie_wood_agent(context: Context):
+    ticker: str = await context.get("ticker")
+
+    LOG.info(f"Running {NAME} agent {ticker}")
     llm = await context.get("llm")
-    llm = llm.as_structured_llm(SignalAnalysis)
-    tickers: list[str] = await context.get("tickers")
+    llm = llm.as_structured_llm(SignalEvent)
     client: AlphaVantageClient = await context.get("alpha_vantage_client")
 
-    for ticker in tickers:
-        data = client.get_ticker_data(ticker)
+    data = client.get_ticker_data(ticker)
 
-        metrics = compute_cathie_wood_metrics(data)
-        analysis = generate_cathie_wood_output(llm, metrics)
+    metrics = compute_metrics(data)
+    analysis = generate_output(llm, metrics)
 
-        key_analysis = f"cathie_wood_analysis_{ticker}"
-        await context.set(key_analysis, analysis)
-        await append(context, "all_analyses", analysis)
+    LOG.info(f"Finished {NAME} agent {ticker}")
 
     return analysis
 
 
-def compute_cathie_wood_metrics(data: TickerData) -> Dict[str, Any]:
+def compute_metrics(data: TickerData) -> Dict[str, Any]:
     """
     Extracts and calculates key financial metrics relevant to Cathie Wood's
     investment philosophy from TickerData.
@@ -255,18 +260,20 @@ def compute_cathie_wood_metrics(data: TickerData) -> Dict[str, Any]:
     return metrics
 
 
-def generate_cathie_wood_output(llm, metrics: dict) -> SignalAnalysis:
-    message = f"Based on the following data, create the investment signal as Ray Dalio would. Analysis Data: {metrics}"
+def generate_output(llm, metrics: dict) -> SignalEvent:
+    message = f"Based on the following data, create the investment signal. Analysis Data: {metrics}"
 
     chat = [
-        ChatMessage.from_str(cathie_wood_PROMPT, MessageRole.SYSTEM),
+        ChatMessage.from_str(PROMPT, MessageRole.SYSTEM),
         ChatMessage.from_str(message, MessageRole.USER),
     ]
 
-    return llm.chat(chat).raw
+    response: SignalEvent = llm.chat(chat).raw
+    response.agent = NAME
+    return response
 
 
-cathie_wood_PROMPT = """
+PROMPT = """
 You are an investment analyst specializing in Cathie Wood's ARK Invest philosophy. Your focus is on identifying and evaluating companies at the forefront of disruptive innovation with significant long-term growth potential. You prioritize understanding the total addressable market, the pace of innovation, and the company's position within its disruptive theme.
 
 Goal: Analyze a given stock based only on the provided financial data (TickerData), applying the principles and key metrics associated with Cathie Wood's investment approach. Provide a clear assessment, detailed reasoning, a final verdict, and a confidence score.
@@ -354,20 +361,21 @@ if __name__ == "__main__":
     basicConfig(level="INFO")
 
     llm = GoogleGenAI(model="gemini-2.0-flash")
+    llm = llm.as_structured_llm(SignalEvent)
 
-    class MockWarrenBuffetWorkflow(Workflow):
+    class MockWorkflow(Workflow):
         @step
-        async def cathie_wood(self, ctx: Context, ev: StartEvent) -> StopEvent:
-            await ctx.set("llm", llm)
+        async def agent(self, ctx: Context, ev: StartEvent) -> StopEvent:
+            await ctx.set("llm_struct", llm)
             await ctx.set(
                 "alpha_vantage_client", AlphaVantageClient(environ["ALPHA_VANTAGE"])
             )
-            await ctx.set("tickers", [ev.ticker])
+            await ctx.set("ticker", ev.ticker)
             result = await cathie_wood_agent(ctx)
             return StopEvent(result=result)
 
     async def run():
-        wf = MockWarrenBuffetWorkflow()
+        wf = MockWorkflow()
         result = await wf.run(ticker="META")
         return result
 

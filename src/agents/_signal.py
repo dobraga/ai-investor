@@ -1,9 +1,10 @@
 from typing import Literal
 
-from pydantic import BaseModel
+from llama_index.core.workflow import Event
 
 
-class SignalAnalysis(BaseModel):
+class SignalEvent(Event):
+    agent: str
     final_verdict: Literal[
         "Strong Candidate", "Possible Candidate", "Not a Typical Investment", "Avoid"
     ]

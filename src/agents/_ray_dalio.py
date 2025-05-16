@@ -1,33 +1,37 @@
+from logging import getLogger
+from pathlib import Path
 from typing import Any, Dict
 
 from llama_index.core.llms import ChatMessage, MessageRole
 from llama_index.core.workflow import Context
 
-from src.agents._signal import SignalAnalysis
+from src.agents._signal import SignalEvent
 from src.tools import AlphaVantageClient, TickerData
-from src.utils.context import append
+from src.utils.format import id_to_name
+
+ID = Path(__file__).stem
+NAME = id_to_name(ID)
+LOG = getLogger(__name__)
 
 
 async def ray_dalio_agent(context: Context):
-    llm = await context.get("llm")
-    llm = llm.as_structured_llm(SignalAnalysis)
-    tickers: list[str] = await context.get("tickers")
+    ticker: str = await context.get("ticker")
+
+    LOG.info(f"Running {NAME} agent {ticker}")
+    llm = await context.get("llm_struct")
     client: AlphaVantageClient = await context.get("alpha_vantage_client")
 
-    for ticker in tickers:
-        data = client.get_ticker_data(ticker)
+    data = client.get_ticker_data(ticker)
 
-        metrics = compute_ray_dalio_metrics(data)
-        analysis = generate_ray_dalio_output(llm, metrics)
+    metrics = compute_metrics(data)
+    analysis = generate_output(llm, metrics)
 
-        key_analysis = f"ray_dalio_analysis_{ticker}"
-        await context.set(key_analysis, analysis)
-        await append(context, "all_analyses", analysis)
+    LOG.info(f"Finished {NAME} agent {ticker}")
 
     return analysis
 
 
-def compute_ray_dalio_metrics(ticker_data: TickerData) -> Dict[str, Any]:
+def compute_metrics(ticker_data: TickerData) -> Dict[str, Any]:
     """
     Extracts key financial metrics from TickerData relevant to a Ray Dalio-like
     analysis, focusing on the most recent data.
@@ -91,18 +95,20 @@ def compute_ray_dalio_metrics(ticker_data: TickerData) -> Dict[str, Any]:
     return metrics
 
 
-def generate_ray_dalio_output(llm, metrics: dict) -> SignalAnalysis:
-    message = f"Based on the following data, create the investment signal as Ray Dalio would. Analysis Data: {metrics}"
+def generate_output(llm, metrics: dict) -> SignalEvent:
+    message = f"Based on the following data, create the investment signal. Analysis Data: {metrics}"
 
     chat = [
-        ChatMessage.from_str(RAY_DALIO_PROMPT, MessageRole.SYSTEM),
+        ChatMessage.from_str(PROMPT, MessageRole.SYSTEM),
         ChatMessage.from_str(message, MessageRole.USER),
     ]
 
-    return llm.chat(chat).raw
+    response: SignalEvent = llm.chat(chat).raw
+    response.agent = NAME
+    return response
 
 
-RAY_DALIO_PROMPT = """
+PROMPT = """
 You are an AI specializing in financial analysis with a focus on principles aligned with Ray Dalio's approach, emphasizing a deep understanding of how the "economic machine" affects different assets and prioritizing risk management and diversification.
 
 Your task is to analyze the provided TickerData for a specific company and generate a structured analysis based on the following financial metrics and associated rules. While Ray Dalio's primary focus is macroeconomics and asset allocation across different economic regimes, this analysis focuses on the fundamental characteristics of an individual company as a component asset within a diversified portfolio.
@@ -195,20 +201,21 @@ if __name__ == "__main__":
     basicConfig(level="INFO")
 
     llm = GoogleGenAI(model="gemini-2.0-flash")
+    llm = llm.as_structured_llm(SignalEvent)
 
-    class MockWarrenBuffetWorkflow(Workflow):
+    class MockWorkflow(Workflow):
         @step
-        async def ray_dalio(self, ctx: Context, ev: StartEvent) -> StopEvent:
-            await ctx.set("llm", llm)
+        async def agent(self, ctx: Context, ev: StartEvent) -> StopEvent:
+            await ctx.set("llm_struct", llm)
             await ctx.set(
                 "alpha_vantage_client", AlphaVantageClient(environ["ALPHA_VANTAGE"])
             )
-            await ctx.set("tickers", [ev.ticker])
+            await ctx.set("ticker", ev.ticker)
             result = await ray_dalio_agent(ctx)
             return StopEvent(result=result)
 
     async def run():
-        wf = MockWarrenBuffetWorkflow()
+        wf = MockWorkflow()
         result = await wf.run(ticker="META")
         return result
 

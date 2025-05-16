@@ -1,37 +1,39 @@
+from logging import getLogger
+from pathlib import Path
 from typing import Optional
 
 from llama_index.core.llms import ChatMessage, MessageRole
 from llama_index.core.workflow import Context
 
-from src.agents._signal import SignalAnalysis
+from src.agents._signal import SignalEvent
 from src.tools import AlphaVantageClient, TickerData
 from src.tools._alpha.earnings import AnnualEarning
-from src.utils.context import append
+from src.utils.format import id_to_name
+
+ID = Path(__file__).stem
+NAME = id_to_name(ID)
+LOG = getLogger(__name__)
 
 
 async def peter_lynch_agent(context: Context):
+    ticker: str = await context.get("ticker")
+
+    LOG.info(f"Running {NAME} agent {ticker}")
     llm = await context.get("llm")
-    llm = llm.as_structured_llm(SignalAnalysis)
-    tickers: list[str] = await context.get("tickers")
+    llm = llm.as_structured_llm(SignalEvent)
     client: AlphaVantageClient = await context.get("alpha_vantage_client")
 
-    for ticker in tickers:
-        data = client.get_ticker_data(ticker)
+    data = client.get_ticker_data(ticker)
 
-        metrics = compute_peter_lynch_metrics(data)
+    metrics = compute_metrics(data)
+    analysis = generate_output(llm, metrics)
 
-        analysis = generate_peter_lynch_output(llm, metrics)
-
-        key_analysis = f"peter_lynch_analysis_{ticker}"
-        await context.set(key_analysis, analysis)
-        await append(context, "all_analyses", analysis)
+    LOG.info(f"Finished {NAME} agent {ticker}")
 
     return analysis
 
 
-def compute_peter_lynch_metrics(
-    ticker_data: TickerData, growth_years: int = 5
-) -> dict[str, float]:
+def compute_metrics(ticker_data: TickerData, growth_years: int = 5) -> dict[str, float]:
     """
     Calculates and extracts key Peter Lynch metrics from TickerData.
 
@@ -157,15 +159,17 @@ def compute_peter_lynch_metrics(
     return metrics_data
 
 
-def generate_peter_lynch_output(llm, metrics: dict) -> SignalAnalysis:
-    message = f"Based on the following data, create the investment signal as Peter Lynch would. Analysis Data: {metrics}"
+def generate_output(llm, metrics: dict) -> SignalEvent:
+    message = f"Based on the following data, create the investment signal. Analysis Data: {metrics}"
 
     chat = [
-        ChatMessage.from_str(PETER_LYNCH_PROMPT, MessageRole.SYSTEM),
+        ChatMessage.from_str(PROMPT, MessageRole.SYSTEM),
         ChatMessage.from_str(message, MessageRole.USER),
     ]
 
-    return llm.chat(chat).raw
+    response: SignalEvent = llm.chat(chat).raw
+    response.agent = NAME
+    return response
 
 
 def calculate_eps_growth_rate(
@@ -202,7 +206,7 @@ def calculate_eps_growth_rate(
         return None  # Handle potential math errors (e.g., negative base with fractional exponent)
 
 
-PETER_LYNCH_PROMPT = """
+PROMPT = """
 Act as an investment analyst specializing in the Peter Lynch stock-picking methodology. Your task is to analyze a stock using the provided financial data and qualitative information, and then present a concise analysis including a verdict, confidence score, and a detailed reasoning.
 
 You will be given:
@@ -237,20 +241,21 @@ if __name__ == "__main__":
     basicConfig(level="INFO")
 
     llm = GoogleGenAI(model="gemini-2.0-flash")
+    llm = llm.as_structured_llm(SignalEvent)
 
-    class MockWarrenBuffetWorkflow(Workflow):
+    class MockWorkflow(Workflow):
         @step
-        async def peter_lynch(self, ctx: Context, ev: StartEvent) -> StopEvent:
-            await ctx.set("llm", llm)
+        async def agent(self, ctx: Context, ev: StartEvent) -> StopEvent:
+            await ctx.set("llm_struct", llm)
             await ctx.set(
                 "alpha_vantage_client", AlphaVantageClient(environ["ALPHA_VANTAGE"])
             )
-            await ctx.set("tickers", [ev.ticker])
+            await ctx.set("ticker", ev.ticker)
             result = await peter_lynch_agent(ctx)
             return StopEvent(result=result)
 
     async def run():
-        wf = MockWarrenBuffetWorkflow()
+        wf = MockWorkflow()
         result = await wf.run(ticker="META")
         return result
 
