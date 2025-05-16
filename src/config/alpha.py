@@ -8,4 +8,4 @@ DAY_IN_SECONDS = 60 * 60 * 24
 class AlphaVantageConfig:
     timeout: int = 10  # timeout in seconds
     cache_dir: Path = Path(".cache") / "alpha"  # cache directory
-    cache_timeout: int = DAY_IN_SECONDS # cache timeout
+    cache_timeout: int = 60 * DAY_IN_SECONDS  # cache timeout
