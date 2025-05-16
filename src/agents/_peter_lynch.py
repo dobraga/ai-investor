@@ -23,7 +23,7 @@ async def peter_lynch_agent(context: Context):
     llm = llm.as_structured_llm(SignalEvent)
     client: AlphaVantageClient = await context.get("alpha_vantage_client")
 
-    data = client.get_ticker_data(ticker)
+    data = await client.aget_ticker_data(ticker)
 
     metrics = compute_metrics(data)
     analysis = generate_output(llm, metrics)

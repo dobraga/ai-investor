@@ -21,7 +21,7 @@ async def ray_dalio_agent(context: Context):
     llm = await context.get("llm_struct")
     client: AlphaVantageClient = await context.get("alpha_vantage_client")
 
-    data = client.get_ticker_data(ticker)
+    data = await client.aget_ticker_data(ticker)
 
     metrics = compute_metrics(data)
     analysis = generate_output(llm, metrics)
