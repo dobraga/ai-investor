@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Any, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -8,7 +9,7 @@ from ._utils import convert_none_str_to_none
 class AnnualBalanceSheetReport(BaseModel):
     model_config = ConfigDict(populate_by_name=True, validate_by_alias=True)
 
-    fiscal_date_ending: str = Field(
+    fiscal_date_ending: date = Field(
         ...,
         alias="fiscalDateEnding",
         description="Date when the fiscal period ends, in YYYY-MM-DD format",
@@ -170,7 +171,7 @@ class AnnualBalanceSheetReport(BaseModel):
 class QuarterlyBalanceSheetReport(BaseModel):
     model_config = ConfigDict(populate_by_name=True, validate_by_alias=True)
 
-    fiscal_date_ending: str = Field(
+    fiscal_date_ending: date = Field(
         ...,
         alias="fiscalDateEnding",
         description="Date when the fiscal period ends, in YYYY-MM-DD format",

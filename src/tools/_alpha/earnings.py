@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Any, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -8,7 +9,7 @@ from ._utils import convert_none_str_to_none
 class AnnualEarning(BaseModel):
     model_config = ConfigDict(populate_by_name=True, validate_by_alias=True)
 
-    fiscal_date_ending: str = Field(
+    fiscal_date_ending: date = Field(
         ...,
         alias="fiscalDateEnding",
         description="Fiscal date ending in YYYY-MM-DD format",
@@ -23,12 +24,12 @@ class AnnualEarning(BaseModel):
 class QuarterlyEarning(BaseModel):
     model_config = ConfigDict(populate_by_name=True, validate_by_alias=True)
 
-    fiscal_date_ending: str = Field(
+    fiscal_date_ending: date = Field(
         ...,
         alias="fiscalDateEnding",
         description="Fiscal date ending in YYYY-MM-DD format",
     )
-    reported_date: str = Field(
+    reported_date: date = Field(
         ..., alias="reportedDate", description="Date the earnings were reported"
     )
     reported_eps: Optional[float] = Field(
