@@ -8,6 +8,7 @@ from .balance_sheet import BalanceSheetResponse
 from .cash_flow import CashFlowResponse
 from .earnings import EarningsResponse
 from .overview import OverviewResponse
+from .insider import InsiderTransactionsResponse
 
 __all__ = ["TickerData", "BalanceSheetResponse", "CashFlowResponse", "EarningsResponse"]
 
@@ -17,6 +18,7 @@ class TickerData(BaseModel):
     balance_sheet: BalanceSheetResponse
     cash_flow: CashFlowResponse
     earnings: EarningsResponse
+    insider_transactions: InsiderTransactionsResponse
 
     def to_dict(self):
         return self.model_dump()
