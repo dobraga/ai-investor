@@ -2,7 +2,7 @@
 
 This project is a workflow-based system that utilizes various agents to analyze and provide insights on stock market data. The system is built using the Llama Index framework and leverages the Google GenAI model for natural language processing.
 
-# Setup*
+# Setup
 
 ### Prerequisites
 
