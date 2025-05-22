@@ -1,5 +1,5 @@
 import asyncio
-from logging import basicConfig, getLogger
+from logging import getLogger
 from typing import Callable
 
 from llama_index.core.workflow import Context, Event, StartEvent, StopEvent, step
@@ -73,9 +73,6 @@ if __name__ == "__main__":
 
     import tyro
 
-    basicConfig(
-        level="INFO", format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S"
-    )
     getLogger("httpx").setLevel("WARNING")
     getLogger("google_genai").setLevel("WARNING")
 
@@ -85,6 +82,7 @@ if __name__ == "__main__":
         config: Config = field(default_factory=Config)  # config
 
     args = tyro.cli(Args)
+    args.config.log.basic_config()
 
     async def run():
         wf = Workflow()
