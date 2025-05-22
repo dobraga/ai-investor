@@ -1,5 +1,4 @@
 import asyncio
-import json
 from datetime import date
 from logging import getLogger
 from typing import Dict
@@ -57,15 +56,6 @@ class AlphaVantageClient:
 
         lock = self._locks.setdefault(symbol, asyncio.Lock())
         async with lock:
-            if (
-                ticker_cache
-                and ticker_cache.exists()
-                and seconds_since_creation(ticker_cache) < self.config.cache_timeout
-            ):
-                logger.debug(f"Using ticker_data cache for {symbol} after lock")
-                full = TickerData.model_validate_json(ticker_cache.read_text())
-                return self._apply_filter(full, end_date)
-
             async with httpx.AsyncClient(timeout=self.config.timeout) as client:
                 tasks = {
                     "overview": self._fetch(
@@ -153,25 +143,6 @@ class AlphaVantageClient:
         response_model: BaseModel,
     ) -> BaseModel:
         # Determine cache path for this endpoint
-        endpoint_cache = None
-        if self.config.cache_dir:
-            endpoint_cache = self.config.cache_dir / f"{symbol}_{function}.json"
-            # If we have a fresh cache, load and return it
-            if (
-                endpoint_cache.exists()
-                and seconds_since_creation(endpoint_cache) < self.config.cache_timeout
-            ):
-                logger.debug(f"Loading cached {function} for {symbol}")
-                raw = endpoint_cache.read_text()
-                data = json.loads(raw)
-                try:
-                    return response_model(**data)
-                except ValidationError as e:
-                    logger.error(f"Validation failed for {symbol} {function}: {e}")
-                    raise RuntimeError(
-                        f"{function} validation error: {e.json(indent=2)}\n{collect_first_elements(data)}"
-                    )
-
         logger.info(f"Fetching data for {symbol} {function}")
         response = await client.get(
             self.BASE_URL,
@@ -186,13 +157,6 @@ class AlphaVantageClient:
 
         if "Information" in data:
             raise RuntimeError(data["Information"])
-
-        # cache raw JSON for this endpoint
-        if endpoint_cache:
-            try:
-                endpoint_cache.write_text(json.dumps(data, indent=2))
-            except Exception as e:
-                logger.warning(f"Failed to write cache for {symbol} {function}: {e}")
 
         try:
             return response_model(**data)
