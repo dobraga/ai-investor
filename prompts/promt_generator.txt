@@ -1,12 +1,173 @@
-I want to create a system prompt (pass data in second stage) to create a Cathie Wood stock analysis, using information above:
+I want to create a system prompt (pass data in second stage) to create a fundamentalist analysist, using information above:
 
-Growth Metrics: Cathie Wood heavily emphasizes top-line growth. QuarterlyRevenueGrowthYOY is a direct measure of recent growth momentum. QuarterlyEarningsGrowthYOY and DilutedEPSTTM indicate if that growth is translating towards profitability. RevenueTTM and GrossProfitTTM are included as foundational elements for margin calculations.
-Profitability and Efficiency: While she invests in companies potentially years away from significant profit, margins like GrossMarginTTM, OperatingMarginTTM, and ProfitMargin are crucial to understand the potential profitability as the company scales. ReturnOnEquityTTM and ReturnOnAssetsTTM show how effectively the company is currently using its capital, though these might be low or negative for early-stage growth companies.
-Cash Flow: Disruptive companies often burn cash before achieving profitability. OperatingCashFlow and CapitalExpenditures (used to derive FreeCashFlow) for the latest quarter and annual period are vital to understand the company's cash runway and ability to fund continued innovation and expansion. NetIncome from the cash flow statement is also included.
-Balance Sheet Strength: The balance sheet provides insight into the company's financial stability and ability to weather periods of cash burn. CashAndCashEquivalents and CashAndShortTermInvestments indicate immediate and short-term liquidity. TotalCurrentAssets, TotalCurrentLiabilities, and the derived CurrentRatio show the ability to meet short-term obligations. TotalDebtToEquity assesses the company's leverage, which is important for risk evaluation. Both quarterly and annual balance sheet metrics are included for a more complete picture.
-Valuation: For high-growth companies, traditional P/E ratios can be less meaningful if earnings are low or negative. Metrics like PriceToSalesRatioTTM, EVToRevenue, and EVToEBITDA are often more relevant as they relate market value to sales or operational cash flow before financing/accounting effects. ForwardPE and PEGRatio are included if the company has current or projected earnings that make these applicable. MarketCapitalization provides context for the company's size.
+fundamental_metrics_descriptions = [
+    {
+        "name": "asset_type",
+        "description": "Type of the asset (e.g., Common Stock, ETF)."
+    },
+    {
+        "name": "company_description",
+        "description": "Brief business summary or description of the company."
+    },
+    {
+        "name": "total_assets_annual",
+        "description": "Total assets reported in the most recent annual balance sheet. Indicates the company's scale of operations by quantifying all resources it owns."
+    },
+    {
+        "name": "total_liabilities_annual",
+        "description": "Total liabilities reported in the most recent annual balance sheet. Represents the company's total financial obligations to outsiders."
+    },
+    {
+        "name": "total_shareholder_equity_annual",
+        "description": "Total shareholders' equity reported in the most recent annual balance sheet. Represents the net worth of the company attributable to shareholders."
+    },
+    {
+        "name": "common_stock_shares_outstanding_annual",
+        "description": "Number of outstanding shares of common stock from the most recent annual balance sheet. Used in per-share calculations."
+    },
+    {
+        "name": "total_assets_quarterly",
+        "description": "Total assets reported in the most recent quarterly balance sheet."
+    },
+    {
+        "name": "total_liabilities_quarterly",
+        "description": "Total liabilities reported in the most recent quarterly balance sheet."
+    },
+    {
+        "name": "total_shareholder_equity_quarterly",
+        "description": "Total shareholders' equity reported in the most recent quarterly balance sheet."
+    },
+    {
+        "name": "common_stock_shares_outstanding_quarterly",
+        "description": "Number of outstanding shares of common stock from the most recent quarterly balance sheet."
+    },
+    {
+        "name": "book_value_per_share_annual",
+        "description": "Shareholders' equity per outstanding common share, based on the most recent annual report. Formula: Total Shareholder Equity (Annual) / Common Stock Shares Outstanding (Annual). Indicates the net asset value per share."
+    },
+    {
+        "name": "current_ratio_annual",
+        "description": "Measures a company's ability to pay short-term obligations (due within one year), based on the most recent annual report. Formula: Total Current Assets (Annual) / Total Current Liabilities (Annual). A higher ratio suggests better liquidity."
+    },
+    {
+        "name": "quick_ratio_annual",
+        "description": "Measures a company's ability to meet its short-term obligations with its most liquid assets (excluding inventory), based on the most recent annual report. Formula: (Cash & Equivalents + Short-Term Investments + Net Receivables) (Annual) / Total Current Liabilities (Annual), or (Current Assets - Inventory) / Current Liabilities. A more conservative liquidity measure than the current ratio."
+    },
+    {
+        "name": "debt_to_equity_annual",
+        "description": "Indicates the relative proportion of shareholders' equity and debt used to finance a company's assets, based on the most recent annual report. Formula: Total Liabilities (Annual) / Total Shareholder Equity (Annual). Shows the company's leverage."
+    },
+    {
+        "name": "book_value_per_share_quarterly",
+        "description": "Shareholders' equity per outstanding common share, based on the most recent quarterly report. Formula: Total Shareholder Equity (Quarterly) / Common Stock Shares Outstanding (Quarterly)."
+    },
+    {
+        "name": "current_ratio_quarterly",
+        "description": "Measures a company's ability to pay short-term obligations, based on the most recent quarterly report. Formula: Total Current Assets (Quarterly) / Total Current Liabilities (Quarterly)."
+    },
+    {
+        "name": "quick_ratio_quarterly",
+        "description": "Measures a company's ability to meet its short-term obligations with its most liquid assets, based on the most recent quarterly report. Formula: (Cash & Equivalents + Short-Term Investments + Net Receivables) (Quarterly) / Total Current Liabilities (Quarterly), or (Current Assets - Inventory) / Current Liabilities."
+    },
+    {
+        "name": "debt_to_equity_quarterly",
+        "description": "Indicates the relative proportion of shareholders' equity and debt used to finance a company's assets, based on the most recent quarterly report. Formula: Total Liabilities (Quarterly) / Total Shareholder Equity (Quarterly)."
+    },
+    {
+        "name": "operating_cash_flow_annual",
+        "description": "Cash generated from the company's core business operations, from the most recent annual cash flow statement. A key indicator of financial health."
+    },
+    {
+        "name": "net_income_annual_from_cf",
+        "description": "The company's total earnings for the most recent annual period, as reported in the cash flow statement. This is used for ROE and ROA calculations."
+    },
+    {
+        "name": "free_cash_flow_annual",
+        "description": "Cash flow available to all investors (debt and equity holders) after covering operational and capital expenditures, from the most recent annual reports. Formula: Operating Cash Flow (Annual) - Capital Expenditures (Annual). Represents cash a company can use for expansion, dividends, or debt reduction."
+    },
+    {
+        "name": "operating_cash_flow_quarterly",
+        "description": "Cash generated from the company's core business operations, from the most recent quarterly cash flow statement."
+    },
+    {
+        "name": "net_income_quarterly_from_cf",
+        "description": "The company's total earnings for the most recent quarter, as reported in the cash flow statement."
+    },
+    {
+        "name": "free_cash_flow_quarterly",
+        "description": "Cash flow available after covering operational and capital expenditures, from the most recent quarterly reports. Formula: Operating Cash Flow (Quarterly) - Capital Expenditures (Quarterly)."
+    },
+    {
+        "name": "cash_flow_per_share_annual",
+        "description": "Operating cash flow generated per outstanding common share, based on most recent annual data. Formula: Operating Cash Flow (Annual) / Common Stock Shares Outstanding (Annual)."
+    },
+    {
+        "name": "cash_flow_per_share_quarterly",
+        "description": "Operating cash flow generated per outstanding common share, based on most recent quarterly data. Formula: Operating Cash Flow (Quarterly) / Common Stock Shares Outstanding (Quarterly)."
+    },
+    {
+        "name": "eps_annual",
+        "description": "Reported earnings per share (EPS) for the most recent annual period. A widely used indicator of a company's profitability."
+    },
+    {
+        "name": "eps_quarterly",
+        "description": "Reported earnings per share (EPS) for the most recent quarterly period."
+    },
+    {
+        "name": "earnings_surprise_percentage_quarterly",
+        "description": "Percentage difference between reported EPS and estimated EPS for the most recent quarter. A positive surprise can indicate better-than-expected performance."
+    },
+    {
+        "name": "return_on_equity_annual (ROE)",
+        "description": "Measures the profitability of a corporation in relation to stockholders’ equity, based on most recent annual data. Formula: Net Income (Annual, from CF) / Total Shareholder Equity (Annual). Indicates how effectively management is using shareholders' investments to generate earnings."
+    },
+    {
+        "name": "return_on_assets_annual (ROA)",
+        "description": "Indicates how profitable a company is relative to its total assets, based on most recent annual data. Formula: Net Income (Annual, from CF) / Total Assets (Annual). Shows how efficiently management is using assets to generate earnings."
+    },
+    {
+        "name": "dividend_per_share_annual",
+        "description": "Total dividends paid out to common shareholders per share over the most recent annual period. Formula: Dividend Payout Common Stock (Annual) / Common Stock Shares Outstanding (Annual). Relevant for income-focused investors."
+    },
+    {
+        "name": "dividend_payout_ratio_annual",
+        "description": "The proportion of earnings paid out as dividends to shareholders, based on most recent annual data. Formula: Dividend Payout Common Stock (Annual) / Net Income (Annual, from CF). Indicates dividend sustainability."
+    },
+    {
+        "name": "total_insider_shares_acquired_all_time",
+        "description": "Total number of shares acquired by insiders (e.g., executives, directors) across all available transaction data. Can indicate positive sentiment from those with intimate knowledge of the company."
+    },
+    {
+        "name": "total_insider_shares_disposed_all_time",
+        "description": "Total number of shares disposed of (sold) by insiders across all available transaction data. Significant selling might warrant further investigation."
+    },
+    {
+        "name": "net_insider_shares_traded_all_time",
+        "description": "Net number of shares traded by insiders (Acquired - Disposed) across all available transaction data. A positive value indicates net buying, negative indicates net selling."
+    },
+    {
+        "name": "latest_insider_transaction_date",
+        "description": "Date of the most recent insider transaction reported."
+    },
+    {
+        "name": "latest_insider_transaction_type",
+        "description": "Type of the most recent insider transaction (A for acquisition, D for disposal)."
+    },
+    {
+        "name": "latest_insider_transaction_shares",
+        "description": "Number of shares involved in the most recent insider transaction."
+    },
+    {
+        "name": "latest_insider_transaction_price",
+        "description": "Share price at which the most recent insider transaction occurred."
+    },
+    {
+        "name": "latest_insider_executive_title",
+        "description": "Title of the executive or insider involved in the most recent transaction."
+    }
+]
 
-1. In the final prompt list all metrics used with add a rule used to make a decision (like Sell only if fundamentals deteriorate or valuation far exceeds intrinsic value)
-2. confidence(0-100) score
-3. ensure the prompt force to have reasoning for each point thats used to give a verdict
-4. a final verdict
+1. In the final prompt list all metrics listed above and add a rule used to make a decision (like Sell only if fundamentals deteriorate or valuation far exceeds intrinsic value)
+2. confidence(0-100) score for this decision
+3. ensure the prompt force to have reasoning for each metric above to give a verdict
+4. a final verdict ["Strong Candidate", "Possible Candidate", "Not a Typical Investment", "Avoid"]
