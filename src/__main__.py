@@ -9,6 +9,7 @@ from llama_index.llms.google_genai import GoogleGenAI
 from src.agents import (
     SignalEvent,
     cathie_wood_agent,
+    fundamentalist_agent,
     peter_lynch_agent,
     ray_dalio_agent,
     warren_buffett_agent,
@@ -44,6 +45,7 @@ class Workflow(BaseWorkflow):
             ray_dalio_agent,
             peter_lynch_agent,
             cathie_wood_agent,
+            fundamentalist_agent,
         ]
         await ctx.set("num_agents", len(agents_to_run))
 
@@ -62,7 +64,7 @@ class Workflow(BaseWorkflow):
         if results is None:
             return None
 
-        combined_result = ", ".join([event.final_verdict for event in results])
+        combined_result = {event.agent: event.final_verdict for event in results}
         return StopEvent(result=combined_result)
 
 
