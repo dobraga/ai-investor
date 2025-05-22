@@ -29,9 +29,9 @@ class QuarterlyEarning(BaseModel):
         alias="fiscalDateEnding",
         description="Fiscal date ending in YYYY-MM-DD format",
     )
-    reported_date: date = Field(
-        ..., alias="reportedDate", description="Date the earnings were reported"
-    )
+    # reported_date: date = Field(
+    #     ..., alias="reportedDate", description="Date the earnings were reported"
+    # )
     reported_eps: Optional[float] = Field(
         None,
         alias="reportedEPS",

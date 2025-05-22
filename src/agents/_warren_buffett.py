@@ -19,7 +19,7 @@ async def warren_buffett_agent(context: Context):
 
     LOG.info(f"Running {NAME} agent {ticker}")
     llm = await context.get("llm_struct")
-    client: AlphaVantageClient = await context.get("alpha_vantage_client")
+    client: AlphaVantageClient = await context.get("alpha_client")
 
     data = await client.aget_ticker_data(ticker)
 
@@ -220,9 +220,7 @@ if __name__ == "__main__":
         @step
         async def agent(self, ctx: Context, ev: StartEvent) -> StopEvent:
             await ctx.set("llm_struct", llm)
-            await ctx.set(
-                "alpha_vantage_client", AlphaVantageClient(environ["ALPHA_VANTAGE"])
-            )
+            await ctx.set("alpha_client", AlphaVantageClient(environ["ALPHA_VANTAGE"]))
             await ctx.set("ticker", ev.ticker)
             result = await warren_buffett_agent(ctx)
             return StopEvent(result=result)
