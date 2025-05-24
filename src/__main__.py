@@ -64,8 +64,61 @@ class Workflow(BaseWorkflow):
         if results is None:
             return None
 
+        html_content = generate_html_output(results)
+        with open("signal_events.html", "w") as f:
+            f.write(html_content)
+
         combined_result = {event.agent: event.final_verdict for event in results}
         return StopEvent(result=combined_result)
+
+
+def generate_html_output(signal_events: list[SignalEvent]) -> str:
+    """Generates an HTML table string from a list of SignalEvent objects."""
+    html_string = """
+<html>
+<head>
+    <title>Signal Analysis Report</title>
+    <style>
+        table {
+            font-family: arial, sans-serif;
+            border-collapse: collapse;
+            width: 100%;
+        }
+        td, th {
+            border: 1px solid #dddddd;
+            text-align: left;
+            padding: 8px;
+        }
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+    <h2>Signal Analysis Report</h2>
+    <table>
+        <tr>
+            <th>Agent</th>
+            <th>Final Verdict</th>
+            <th>Confidence</th>
+            <th>Explanation</th>
+        </tr>
+"""
+    for event in signal_events:
+        html_string += f"""
+        <tr>
+            <td>{event.agent}</td>
+            <td>{event.final_verdict}</td>
+            <td>{event.confidence}</td>
+            <td>{event.explanation}</td>
+        </tr>
+"""
+    html_string += """
+    </table>
+</body>
+</html>
+"""
+    return html_string
 
 
 if __name__ == "__main__":
