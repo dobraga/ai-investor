@@ -1,4 +1,5 @@
 import asyncio
+import markdown2  # Add import for markdown2
 from logging import getLogger
 from typing import Callable
 
@@ -110,7 +111,7 @@ def generate_html_output(signal_events: list[SignalEvent]) -> str:
             <td>{event.agent}</td>
             <td>{event.final_verdict}</td>
             <td>{event.confidence}</td>
-            <td>{event.explanation}</td>
+            <td>{markdown2.markdown(event.explanation)}</td>
         </tr>
 """
     html_string += """
