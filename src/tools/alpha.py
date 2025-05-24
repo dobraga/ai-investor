@@ -1,4 +1,5 @@
 import asyncio
+import json
 from datetime import date
 from logging import getLogger
 from typing import Dict
@@ -24,9 +25,8 @@ logger = getLogger(__name__)
 class AlphaVantageClient:
     """
     Client to fetch and parse financial data from Alpha Vantage,
-    with centralized file-based caching, deduplication via per-symbol locks, and error handling.
+    with centralized file-based caching for individual API calls, deduplication via per-symbol locks, and error handling.
     Supports filtering of reports by a provided end_date.
-    Now with per-endpoint caching and cache lookup in `_fetch`.
     """
 
     BASE_URL = "https://www.alphavantage.co/query"
@@ -36,24 +36,13 @@ class AlphaVantageClient:
         self._locks: Dict[str, asyncio.Lock] = {}
         if self.config.cache_dir:
             self.config.cache_dir.mkdir(parents=True, exist_ok=True)
+            self.config.cache_error_dir.mkdir(parents=True, exist_ok=True)
 
     async def aget_ticker_data(
         self,
         symbol: str,
         end_date: date = date.today(),
     ) -> TickerData:
-        ticker_cache = None
-        if self.config.cache_dir:
-            ticker_cache = self.config.cache_dir / f"{symbol}.json"
-            if (
-                ticker_cache.exists()
-                and seconds_since_creation(ticker_cache) < self.config.cache_timeout
-            ):
-                logger.debug(f"Using ticker_data cache for {symbol}")
-                raw = ticker_cache.read_text()
-                full = TickerData.model_validate_json(raw)
-                return self._apply_filter(full, end_date)
-
         lock = self._locks.setdefault(symbol, asyncio.Lock())
         async with lock:
             async with httpx.AsyncClient(timeout=self.config.timeout) as client:
@@ -89,8 +78,6 @@ class AlphaVantageClient:
                 insider_transactions=it_resp,
             )
 
-            if ticker_cache:
-                ticker_cache.write_text(full.model_dump_json(indent=2))
             return self._apply_filter(full, end_date)
 
     def get_ticker_data(
@@ -142,7 +129,23 @@ class AlphaVantageClient:
         symbol: str,
         response_model: BaseModel,
     ) -> BaseModel:
-        # Determine cache path for this endpoint
+        cache_file_path = None
+        if self.config.cache_dir:
+            cache_file_path = self.config.cache_dir / f"{symbol}_{function}.json"
+            if (
+                cache_file_path.exists()
+                and seconds_since_creation(cache_file_path) < self.config.cache_timeout
+            ):
+                logger.debug(f"Using cached response for {symbol} {function}")
+                raw = cache_file_path.read_text()
+                try:
+                    return response_model.model_validate_json(raw)
+                except ValidationError as e:
+                    logger.warning(f"Cached data for {symbol} {function} is invalid")
+                    raise RuntimeError(
+                        f"Validation error: {e}\n\n{symbol=} {function=}"
+                    )
+
         logger.info(f"Fetching data for {symbol} {function}")
         response = await client.get(
             self.BASE_URL,
@@ -158,12 +161,30 @@ class AlphaVantageClient:
         if "Information" in data:
             raise RuntimeError(data["Information"])
 
+        # Store raw response after status check and before Information check
+        if cache_file_path:
+            cache_file_path.write_text(json.dumps(data, indent=2))
+            logger.debug(
+                f"Stored raw response for {symbol} {function} at {cache_file_path}"
+            )
+
         try:
             return response_model(**data)
         except ValidationError as e:
             logger.error(f"Validation failed for {symbol} {function}: {e}")
+
+            error_cache_file_path = (
+                self.config.cache_error_dir / f"{symbol}_{function}_error.json"
+            )
+            error_info = {
+                "validation_errors": e.errors(),
+                "raw_data": data,
+            }
+            error_cache_file_path.write_text(json.dumps(error_info, indent=2))
+
+            logger.error(f"Validation failed for {symbol} {function}: {e}")
             raise RuntimeError(
-                f"{function} validation error: {e.json(indent=2)}\n{collect_first_elements(data)}"
+                f"Validation error: {e}\n\nCollected first elements: {collect_first_elements(data)}\n\n{symbol=} {function=}"
             )
 
 

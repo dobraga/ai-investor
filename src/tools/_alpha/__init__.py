@@ -7,8 +7,8 @@ from pydantic import BaseModel
 from .balance_sheet import BalanceSheetResponse
 from .cash_flow import CashFlowResponse
 from .earnings import EarningsResponse
-from .overview import OverviewResponse
 from .insider import InsiderTransactionsResponse
+from .overview import OverviewResponse
 
 __all__ = ["TickerData", "BalanceSheetResponse", "CashFlowResponse", "EarningsResponse"]
 

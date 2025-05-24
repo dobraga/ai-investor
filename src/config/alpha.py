@@ -11,3 +11,4 @@ class AlphaVantageConfig:
     timeout: int = 10  # timeout in seconds
     cache_dir: Path = CURRENT_DIR / ".cache" / "alpha"  # cache directory
     cache_timeout: int = 60 * DAY_IN_SECONDS  # cache timeout in seconds
+    cache_error_dir = CURRENT_DIR / ".cache" / "alpha_error"  # cache error directory
