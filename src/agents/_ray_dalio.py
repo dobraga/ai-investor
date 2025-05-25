@@ -329,7 +329,7 @@ def compute_metrics(
     # === DATA FRESHNESS INDICATORS ===
 
     try:
-        latest_date = latest_balance.fiscal_date_ending.date()
+        latest_date = latest_balance.fiscal_date_ending
         today = date.today()
         days_since_report = (today - latest_date).days
         metrics["data_freshness_score"] = days_since_report / 365.0
