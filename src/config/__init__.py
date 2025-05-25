@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 
 from .agents import AgentConfig, WarrenBuffetConfig
 from .alpha import AlphaVantageConfig
+from .llm import LLMConfig
 from .log import LogConfig
 
 __all__ = ["AlphaVantageConfig", "Config", "WarrenBuffetConfig", "AgentConfig"]
@@ -13,6 +14,7 @@ __all__ = ["AlphaVantageConfig", "Config", "WarrenBuffetConfig", "AgentConfig"]
 @dataclass
 class Config:
     log: LogConfig = field(default_factory=LogConfig)
+    llm: LLMConfig = field(default_factory=LLMConfig)
     alpha: AlphaVantageConfig = field(default_factory=AlphaVantageConfig)
     agents: AgentConfig = field(default_factory=AgentConfig)
 

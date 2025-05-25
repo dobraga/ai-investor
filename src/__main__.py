@@ -1,8 +1,8 @@
 import asyncio
-import markdown2  # Add import for markdown2
 from logging import getLogger
 from typing import Callable
 
+import markdown2
 from llama_index.core.workflow import Context, Event, StartEvent, StopEvent, step
 from llama_index.core.workflow import Workflow as BaseWorkflow
 from llama_index.llms.google_genai import GoogleGenAI
@@ -13,6 +13,7 @@ from src.agents import (
     fundamentalist_agent,
     peter_lynch_agent,
     ray_dalio_agent,
+    risk_manager_agent,
     warren_buffett_agent,
 )
 from src.config import Config
@@ -32,7 +33,7 @@ class Workflow(BaseWorkflow):
     async def start(self, ctx: Context, ev: StartEvent) -> StartAgentEvent:
         config: Config = ev.config
 
-        llm = GoogleGenAI(model="gemini-2.0-flash")
+        llm = GoogleGenAI(model=config.llm.model)
         llm_struct = llm.as_structured_llm(SignalEvent)
         alpha_client = AlphaVantageClient(config.alpha)
 
@@ -65,8 +66,12 @@ class Workflow(BaseWorkflow):
         if results is None:
             return None
 
+        ticker = await ctx.get("ticker")
+        risk_manager_agent_result = await risk_manager_agent(ctx, results)
+        results = [risk_manager_agent_result] + results
+
         html_content = generate_html_output(results)
-        with open("signal_events.html", "w") as f:
+        with open(f"signal_events_{ticker}.html", "w") as f:
             f.write(html_content)
 
         combined_result = {event.agent: event.final_verdict for event in results}
