@@ -2,12 +2,13 @@ from logging import getLogger
 from pathlib import Path
 from typing import Any, Dict
 
-from llama_index.core.llms import ChatMessage, MessageRole
 from llama_index.core.workflow import Context
 
 from src.agents._signal import SignalEvent
 from src.tools import AlphaVantageClient, TickerData
 from src.utils.format import id_to_name
+
+from ._utils import generate_output
 
 ID = Path(__file__).stem
 NAME = id_to_name(ID)
@@ -24,324 +25,570 @@ async def cathie_wood_agent(context: Context):
     data = await client.aget_ticker_data(ticker)
 
     metrics = compute_metrics(data)
-    analysis = generate_output(llm, metrics)
+    analysis = generate_output(llm, metrics, PROMPT, NAME)
 
     LOG.info(f"Finished {NAME} agent {ticker}")
 
     return analysis
 
 
-def compute_metrics(data: TickerData) -> Dict[str, Any]:
+def compute_metrics(
+    ticker_data: TickerData, timeframe="annual", lookback_years=5
+) -> Dict[str, Any]:
     """
-    Extracts and calculates key financial metrics relevant to Cathie Wood's
-    investment philosophy from TickerData.
+    Calculate fundamental analysis metrics in the style of Cathie Wood/ARK Invest.
 
     Args:
-        data: An object structured like the TickerData BaseModel, containing
-              overview, balance_sheet, cash_flow, and earnings information.
-              Lists within TickerData are assumed to have the most recent data first.
+        ticker_data: TickerData object containing financial statements
+        timeframe: 'annual' or 'quarterly' analysis
+        lookback_years: Number of years to analyze for trends (default 5)
 
     Returns:
-        A dictionary containing the extracted and calculated metrics. Returns
-        None for metrics that cannot be calculated due to missing data.
+        dict: Comprehensive metrics dictionary
     """
-    metrics = {}
 
-    # --- Growth Metrics (Focus on top-line and earnings growth) ---
-    overview = data.overview
-    metrics["QuarterlyRevenueGrowthYOY"] = overview.quarterly_revenue_growth_yoy
-    metrics["QuarterlyEarningsGrowthYOY"] = overview.quarterly_earnings_growth_yoy
-    metrics["DilutedEPSTTM"] = overview.diluted_eps_ttm
-    metrics["RevenueTTM"] = (
-        float(overview.revenue_ttm) if overview.revenue_ttm is not None else None
-    )
-    metrics["GrossProfitTTM"] = (
-        float(overview.gross_profit_ttm)
-        if overview.gross_profit_ttm is not None
-        else None
-    )
+    def safe_divide(numerator, denominator, default=None):
+        """Safe division with None handling"""
+        if numerator is None or denominator is None or denominator == 0:
+            return default
+        return numerator / denominator
 
-    # --- Profitability and Efficiency Metrics (Indicative of scaling potential) ---
-    metrics["OperatingMarginTTM"] = overview.operating_margin_ttm
-    metrics["ProfitMargin"] = overview.profit_margin  # TTM profit margin
+    def safe_subtract(a, b, default=None):
+        """Safe subtraction with None handling"""
+        if a is None or b is None:
+            return default
+        return a - b
 
-    # Calculate Gross Margin TTM
-    if metrics["RevenueTTM"] is not None and metrics["RevenueTTM"] != 0:
-        metrics["GrossMarginTTM"] = (
-            (metrics["GrossProfitTTM"] / metrics["RevenueTTM"]) * 100
-            if metrics["GrossProfitTTM"] is not None
-            else None
+    def calculate_growth_rate(values, periods=1):
+        """Calculate compound annual growth rate"""
+        if len(values) < 2 or values[0] is None or values[-1] is None:
+            return None
+        if values[-1] <= 0:
+            return None
+        try:
+            return ((values[0] / values[-1]) ** (1 / periods) - 1) * 100
+        except Exception as e:
+            LOG.error(e)
+            return None
+
+    def calculate_trend_score(values):
+        """Calculate trend consistency score (0-100)"""
+        if len(values) < 3:
+            return None
+        positive_changes = 0
+        total_changes = 0
+        for i in range(1, len(values)):
+            if values[i - 1] is not None and values[i] is not None:
+                if values[i] > values[i - 1]:
+                    positive_changes += 1
+                total_changes += 1
+        return (positive_changes / total_changes * 100) if total_changes > 0 else None
+
+    # Select data source based on timeframe
+    if timeframe == "quarterly":
+        balance_reports = ticker_data.balance_sheet.quarterly_reports[
+            : min(lookback_years * 4, len(ticker_data.balance_sheet.quarterly_reports))
+        ]
+        cash_flow_reports = (
+            ticker_data.cash_flow.quarterly_reports[
+                : min(lookback_years * 4, len(ticker_data.cash_flow.quarterly_reports))
+            ]
+            if ticker_data.cash_flow.quarterly_reports
+            else []
         )
+        earnings_reports = ticker_data.earnings.quarterly_earnings[
+            : min(lookback_years * 4, len(ticker_data.earnings.quarterly_earnings))
+        ]
     else:
-        metrics["GrossMarginTTM"] = None
+        balance_reports = ticker_data.balance_sheet.annual_reports[
+            : min(lookback_years, len(ticker_data.balance_sheet.annual_reports))
+        ]
+        cash_flow_reports = ticker_data.cash_flow.annual_reports[
+            : min(lookback_years, len(ticker_data.cash_flow.annual_reports))
+        ]
+        earnings_reports = ticker_data.earnings.annual_earnings[
+            : min(lookback_years, len(ticker_data.earnings.annual_earnings))
+        ]
 
-    metrics["ReturnOnEquityTTM"] = overview.return_on_equity_ttm
-    metrics["ReturnOnAssetsTTM"] = overview.return_on_assets_ttm
+    if not balance_reports:
+        return {"error": "No balance sheet data available"}
 
-    # --- Cash Flow Metrics (Crucial for funding innovation and growth) ---
-    latest_quarterly_cashflow = (
-        data.cash_flow.quarterly_reports[0]
-        if data.cash_flow.quarterly_reports
-        else None
+    # Get most recent data
+    latest_balance = balance_reports[0]
+    latest_cash_flow = cash_flow_reports[0] if cash_flow_reports else None
+    latest_earnings = earnings_reports[0] if earnings_reports else None
+
+    # Initialize results
+    metrics = {
+        "data_quality": {
+            "fiscal_date_ending": latest_balance.fiscal_date_ending,
+            "reported_currency": latest_balance.reported_currency,
+            "timeframe": timeframe,
+            "periods_analyzed": len(balance_reports),
+        }
+    }
+
+    # === GROWTH METRICS (Cathie Wood's primary focus) ===
+
+    # Revenue Growth (from cash flow net income as proxy)
+    net_incomes = [
+        cf.net_income for cf in cash_flow_reports if cf.net_income is not None
+    ]
+    if len(net_incomes) >= 2:
+        revenue_growth_rate = calculate_growth_rate(net_incomes, len(net_incomes) - 1)
+        revenue_trend_score = calculate_trend_score(
+            net_incomes[::-1]
+        )  # Reverse for chronological order
+        metrics["revenue_growth_rate"] = revenue_growth_rate
+        metrics["revenue_trend_consistency"] = revenue_trend_score
+
+    # Asset Growth Rate
+    total_assets = [
+        bs.total_assets for bs in balance_reports if bs.total_assets is not None
+    ]
+    if len(total_assets) >= 2:
+        asset_growth_rate = calculate_growth_rate(total_assets, len(total_assets) - 1)
+        metrics["asset_growth_rate"] = asset_growth_rate
+
+    # R&D Intensity Proxy (Intangible Assets Growth)
+    intangible_assets = [
+        bs.intangible_assets
+        for bs in balance_reports
+        if bs.intangible_assets is not None
+    ]
+    if len(intangible_assets) >= 2:
+        intangible_growth_rate = calculate_growth_rate(
+            intangible_assets, len(intangible_assets) - 1
+        )
+        metrics["innovation_investment_growth"] = intangible_growth_rate
+
+    # === FINANCIAL STRENGTH METRICS ===
+
+    # Current Ratio
+    current_ratio = safe_divide(
+        latest_balance.total_current_assets, latest_balance.total_current_liabilities
     )
+    metrics["current_ratio"] = current_ratio
 
-    if latest_quarterly_cashflow:
-        metrics["OperatingCashFlow_LQ"] = latest_quarterly_cashflow.operating_cashflow
-        metrics["CapitalExpenditures_LQ"] = (
-            latest_quarterly_cashflow.capital_expenditures
-        )
-        # Calculate Free Cash Flow (Operating Cash Flow - Capital Expenditures) for Latest Quarter
-        if (
-            metrics["OperatingCashFlow_LQ"] is not None
-            and metrics["CapitalExpenditures_LQ"] is not None
-        ):
-            metrics["FreeCashFlow_LQ"] = (
-                metrics["OperatingCashFlow_LQ"] - metrics["CapitalExpenditures_LQ"]
-            )
-        else:
-            metrics["FreeCashFlow_LQ"] = None
-        metrics["NetIncome_LQ"] = (
-            latest_quarterly_cashflow.net_income
-        )  # Using Net Income from Cash Flow
-
-    latest_annual_cashflow = (
-        data.cash_flow.annual_reports[0] if data.cash_flow.annual_reports else None
+    # Quick Ratio (Cash + Short-term investments / Current liabilities)
+    quick_assets = (latest_balance.cash_and_cash_equivalents_at_carrying_value or 0) + (
+        latest_balance.cash_and_short_term_investments or 0
     )
-    if latest_annual_cashflow:
-        metrics["OperatingCashFlow_LA"] = latest_annual_cashflow.operating_cashflow
-        metrics["CapitalExpenditures_LA"] = latest_annual_cashflow.capital_expenditures
-        # Calculate Free Cash Flow (Operating Cash Flow - Capital Expenditures) for Latest Annual
-        if (
-            metrics["OperatingCashFlow_LA"] is not None
-            and metrics["CapitalExpenditures_LA"] is not None
-        ):
-            metrics["FreeCashFlow_LA"] = (
-                metrics["OperatingCashFlow_LA"] - metrics["CapitalExpenditures_LA"]
-            )
-        else:
-            metrics["FreeCashFlow_LA"] = None
-        metrics["NetIncome_LA"] = (
-            latest_annual_cashflow.net_income
-        )  # Using Net Income from Cash Flow
+    quick_ratio = safe_divide(quick_assets, latest_balance.total_current_liabilities)
+    metrics["quick_ratio"] = quick_ratio
 
-    # --- Balance Sheet Strength (Assessing runway and financial health) ---
-    latest_quarterly_balancesheet = (
-        data.balance_sheet.quarterly_reports[0]
-        if data.balance_sheet.quarterly_reports
-        else None
+    # Debt-to-Equity Ratio
+    total_debt = latest_balance.short_long_term_debt_total or 0
+    debt_to_equity = safe_divide(total_debt, latest_balance.total_shareholder_equity)
+    metrics["debt_to_equity_ratio"] = debt_to_equity
+
+    # Debt-to-Assets Ratio
+    debt_to_assets = safe_divide(total_debt, latest_balance.total_assets)
+    metrics["debt_to_assets_ratio"] = debt_to_assets
+
+    # === EFFICIENCY METRICS ===
+
+    # Asset Turnover (approximated using available data)
+    if latest_cash_flow and latest_cash_flow.net_income:
+        asset_turnover = safe_divide(
+            latest_cash_flow.net_income, latest_balance.total_assets
+        )
+        metrics["asset_efficiency"] = asset_turnover
+
+    # Return on Assets (ROA)
+    if latest_cash_flow and latest_cash_flow.net_income:
+        roa = (
+            safe_divide(latest_cash_flow.net_income, latest_balance.total_assets) * 100
+        )
+        metrics["return_on_assets"] = roa
+
+    # Return on Equity (ROE)
+    if latest_cash_flow and latest_cash_flow.net_income:
+        roe = (
+            safe_divide(
+                latest_cash_flow.net_income, latest_balance.total_shareholder_equity
+            )
+            * 100
+        )
+        metrics["return_on_equity"] = roe
+
+    # === CASH FLOW METRICS (Critical for ARK's analysis) ===
+
+    if latest_cash_flow:
+        # Operating Cash Flow Margin
+        if latest_cash_flow.operating_cashflow and latest_cash_flow.net_income:
+            ocf_margin = (
+                safe_divide(
+                    latest_cash_flow.operating_cashflow, latest_cash_flow.net_income
+                )
+                * 100
+            )
+            metrics["operating_cash_flow_margin"] = ocf_margin
+
+        # Free Cash Flow (Operating Cash Flow - Capital Expenditures)
+        if (
+            latest_cash_flow.operating_cashflow
+            and latest_cash_flow.capital_expenditures
+        ):
+            free_cash_flow = latest_cash_flow.operating_cashflow - abs(
+                latest_cash_flow.capital_expenditures
+            )
+            metrics["free_cash_flow"] = free_cash_flow
+
+            # Free Cash Flow Yield
+            if latest_balance.total_assets:
+                fcf_yield = (
+                    safe_divide(free_cash_flow, latest_balance.total_assets) * 100
+                )
+                metrics["free_cash_flow_yield"] = fcf_yield
+
+        # Cash Flow Growth
+        operating_cash_flows = [
+            cf.operating_cashflow
+            for cf in cash_flow_reports
+            if cf.operating_cashflow is not None
+        ]
+        if len(operating_cash_flows) >= 2:
+            cash_flow_growth = calculate_growth_rate(
+                operating_cash_flows, len(operating_cash_flows) - 1
+            )
+            metrics["operating_cash_flow_growth"] = cash_flow_growth
+
+    # === BALANCE SHEET QUALITY METRICS ===
+
+    # Cash Position Strength
+    total_cash = (latest_balance.cash_and_cash_equivalents_at_carrying_value or 0) + (
+        latest_balance.cash_and_short_term_investments or 0
     )
+    cash_to_assets = safe_divide(total_cash, latest_balance.total_assets) * 100
+    metrics["cash_position_ratio"] = cash_to_assets
 
-    if latest_quarterly_balancesheet:
-        metrics["CashAndCashEquivalents_LQ"] = (
-            latest_quarterly_balancesheet.cash_and_cash_equivalents_at_carrying_value
-        )
-        metrics["CashAndShortTermInvestments_LQ"] = (
-            latest_quarterly_balancesheet.cash_and_short_term_investments
-        )
-        metrics["TotalCurrentAssets_LQ"] = (
-            latest_quarterly_balancesheet.total_current_assets
-        )
-        metrics["TotalCurrentLiabilities_LQ"] = (
-            latest_quarterly_balancesheet.total_current_liabilities
-        )
-        metrics["TotalShareholderEquity_LQ"] = (
-            latest_quarterly_balancesheet.total_shareholder_equity
-        )
-
-        # Calculate Current Ratio
-        if (
-            metrics["TotalCurrentLiabilities_LQ"] is not None
-            and metrics["TotalCurrentLiabilities_LQ"] != 0
-        ):
-            metrics["CurrentRatio_LQ"] = (
-                metrics["TotalCurrentAssets_LQ"] / metrics["TotalCurrentLiabilities_LQ"]
-                if metrics["TotalCurrentAssets_LQ"] is not None
-                else None
-            )
-        else:
-            metrics["CurrentRatio_LQ"] = None
-
-        # Calculate Total Debt to Equity (Using Short-Term Debt + Long-Term Debt)
-        total_debt_lq = None
-        st_debt_lq = latest_quarterly_balancesheet.short_term_debt
-        lt_debt_lq = latest_quarterly_balancesheet.long_term_debt
-        if st_debt_lq is not None and lt_debt_lq is not None:
-            total_debt_lq = st_debt_lq + lt_debt_lq
-        elif (
-            st_debt_lq is not None
-        ):  # Account for cases where only short-term debt is reported
-            total_debt_lq = st_debt_lq
-        elif (
-            lt_debt_lq is not None
-        ):  # Account for cases where only long-term debt is reported
-            total_debt_lq = lt_debt_lq
-
-        if (
-            total_debt_lq is not None
-            and metrics["TotalShareholderEquity_LQ"] is not None
-            and metrics["TotalShareholderEquity_LQ"] != 0
-        ):
-            metrics["TotalDebtToEquity_LQ"] = (
-                total_debt_lq / metrics["TotalShareholderEquity_LQ"]
-            )
-        else:
-            metrics["TotalDebtToEquity_LQ"] = None
-
-    latest_annual_balancesheet = (
-        data.balance_sheet.annual_reports[0]
-        if data.balance_sheet.annual_reports
-        else None
+    # Working Capital
+    working_capital = safe_subtract(
+        latest_balance.total_current_assets, latest_balance.total_current_liabilities
     )
-    if latest_annual_balancesheet:
-        metrics["CashAndCashEquivalents_LA"] = (
-            latest_annual_balancesheet.cash_and_cash_equivalents_at_carrying_value
-        )
-        metrics["CashAndShortTermInvestments_LA"] = (
-            latest_annual_balancesheet.cash_and_short_term_investments
-        )
-        metrics["TotalCurrentAssets_LA"] = (
-            latest_annual_balancesheet.total_current_assets
-        )
-        metrics["TotalCurrentLiabilities_LA"] = (
-            latest_annual_balancesheet.total_current_liabilities
-        )
-        metrics["TotalShareholderEquity_LA"] = (
-            latest_annual_balancesheet.total_shareholder_equity
-        )
+    metrics["working_capital"] = working_capital
 
-        # Calculate Current Ratio
-        if (
-            metrics["TotalCurrentLiabilities_LA"] is not None
-            and metrics["TotalCurrentLiabilities_LA"] != 0
-        ):
-            metrics["CurrentRatio_LA"] = (
-                metrics["TotalCurrentAssets_LA"] / metrics["TotalCurrentLiabilities_LA"]
-                if metrics["TotalCurrentAssets_LA"] is not None
-                else None
-            )
-        else:
-            metrics["CurrentRatio_LA"] = None
-
-        # Calculate Total Debt to Equity (Using Short-Term Debt + Long-Term Debt)
-        total_debt_la = None
-        st_debt_la = latest_annual_balancesheet.short_term_debt
-        lt_debt_la = latest_annual_balancesheet.long_term_debt
-        if st_debt_la is not None and lt_debt_la is not None:
-            total_debt_la = st_debt_la + lt_debt_la
-        elif st_debt_la is not None:
-            total_debt_la = st_debt_la
-        elif lt_debt_la is not None:
-            total_debt_la = lt_debt_la
-
-        if (
-            total_debt_la is not None
-            and metrics["TotalShareholderEquity_LA"] is not None
-            and metrics["TotalShareholderEquity_LA"] != 0
-        ):
-            metrics["TotalDebtToEquity_LA"] = (
-                total_debt_la / metrics["TotalShareholderEquity_LA"]
-            )
-        else:
-            metrics["TotalDebtToEquity_LA"] = None
-
-    # --- Valuation Metrics (Relative to growth potential) ---
-    metrics["PriceToSalesRatioTTM"] = overview.price_to_sales_ratio_ttm
-    metrics["ForwardPE"] = overview.forward_pe
-    metrics["PEGRatio"] = overview.peg_ratio
-    metrics["EVToRevenue"] = overview.ev_to_revenue
-    metrics["EVToEBITDA"] = overview.ev_to_ebitda
-    metrics["MarketCapitalization"] = (
-        float(overview.market_capitalization)
-        if overview.market_capitalization is not None
-        else None
+    # Working Capital Ratio
+    working_capital_ratio = (
+        safe_divide(working_capital, latest_balance.total_assets) * 100
     )
+    metrics["working_capital_ratio"] = working_capital_ratio
+
+    # === INNOVATION & INTANGIBLES FOCUS ===
+
+    # Intangible Asset Ratio (Key for tech/innovation companies)
+    intangible_ratio = (
+        safe_divide(latest_balance.intangible_assets, latest_balance.total_assets) * 100
+    )
+    metrics["intangible_assets_ratio"] = intangible_ratio
+
+    # Goodwill Ratio
+    goodwill_ratio = (
+        safe_divide(latest_balance.goodwill, latest_balance.total_assets) * 100
+    )
+    metrics["goodwill_ratio"] = goodwill_ratio
+
+    # === EARNINGS QUALITY METRICS ===
+
+    if earnings_reports:
+        # EPS Growth Rate
+        eps_values = [
+            e.reported_eps for e in earnings_reports if e.reported_eps is not None
+        ]
+        if len(eps_values) >= 2:
+            eps_growth_rate = calculate_growth_rate(eps_values, len(eps_values) - 1)
+            eps_trend_score = calculate_trend_score(eps_values[::-1])
+            metrics["eps_growth_rate"] = eps_growth_rate
+            metrics["eps_trend_consistency"] = eps_trend_score
+
+        # Earnings Surprise Analysis (for quarterly data)
+        if timeframe == "quarterly" and hasattr(earnings_reports[0], "surprise"):
+            recent_surprises = [
+                e.surprise for e in earnings_reports[:4] if e.surprise is not None
+            ]
+            if recent_surprises:
+                avg_surprise = sum(recent_surprises) / len(recent_surprises)
+                positive_surprises = sum(1 for s in recent_surprises if s > 0)
+                surprise_consistency = (
+                    positive_surprises / len(recent_surprises)
+                ) * 100
+                metrics["average_earnings_surprise"] = avg_surprise
+                metrics["earnings_surprise_consistency"] = surprise_consistency
+
+    # === INSIDER SENTIMENT ===
+
+    if ticker_data.insider_transactions and ticker_data.insider_transactions.data:
+        # Recent insider activity (last 90 days approximation - take first 10 transactions)
+        recent_transactions = ticker_data.insider_transactions.data[:10]
+
+        if recent_transactions:
+            acquisitions = [
+                t for t in recent_transactions if t.acquisition_or_disposal == "A"
+            ]
+            disposals = [
+                t for t in recent_transactions if t.acquisition_or_disposal == "D"
+            ]
+
+            total_acquired = sum(t.shares for t in acquisitions) if acquisitions else 0
+            total_disposed = sum(t.shares for t in disposals) if disposals else 0
+
+            net_insider_activity = total_acquired - total_disposed
+            metrics["net_insider_share_activity"] = net_insider_activity
+
+            if len(recent_transactions) > 0:
+                insider_bullishness = (
+                    len(acquisitions) / len(recent_transactions)
+                ) * 100
+                metrics["insider_bullishness_ratio"] = insider_bullishness
+
+    # === COMPOSITE SCORES ===
+
+    # Growth Score (0-100)
+    growth_components = []
+    if metrics.get("revenue_growth_rate"):
+        growth_components.append(min(max(metrics["revenue_growth_rate"], -50), 100))
+    if metrics.get("asset_growth_rate"):
+        growth_components.append(min(max(metrics["asset_growth_rate"], -50), 100))
+    if metrics.get("eps_growth_rate"):
+        growth_components.append(min(max(metrics["eps_growth_rate"], -50), 100))
+
+    if growth_components:
+        growth_score = sum(growth_components) / len(growth_components)
+        metrics["composite_growth_score"] = max(
+            0, min(100, growth_score + 50)
+        )  # Normalize to 0-100
+
+    # Financial Health Score (0-100)
+    health_score = 0
+    health_components = 0
+
+    if current_ratio:
+        health_score += min(100, max(0, (current_ratio - 0.5) * 50))  # Good if >1.5
+        health_components += 1
+
+    if debt_to_equity is not None:
+        health_score += max(0, 100 - (debt_to_equity * 20))  # Good if <0.5
+        health_components += 1
+
+    if cash_to_assets:
+        health_score += min(100, cash_to_assets * 5)  # Good if >20%
+        health_components += 1
+
+    if health_components > 0:
+        metrics["composite_financial_health_score"] = health_score / health_components
+
+    # Innovation Score (0-100) - Key for ARK-style investing
+    innovation_score = 0
+    innovation_components = 0
+
+    if intangible_ratio:
+        innovation_score += min(100, intangible_ratio * 2)  # Good if >50%
+        innovation_components += 1
+
+    if metrics.get("innovation_investment_growth"):
+        innovation_score += min(
+            100, max(0, metrics["innovation_investment_growth"] + 50)
+        )
+        innovation_components += 1
+
+    if innovation_components > 0:
+        metrics["composite_innovation_score"] = innovation_score / innovation_components
+
+    # Overall ARK-Style Score (weighted toward growth and innovation)
+    overall_components = []
+    if metrics.get("composite_growth_score"):
+        overall_components.append(("growth", metrics["composite_growth_score"], 0.4))
+    if metrics.get("composite_innovation_score"):
+        overall_components.append(
+            ("innovation", metrics["composite_innovation_score"], 0.35)
+        )
+    if metrics.get("composite_financial_health_score"):
+        overall_components.append(
+            ("health", metrics["composite_financial_health_score"], 0.25)
+        )
+
+    if overall_components:
+        weighted_score = sum(score * weight for _, score, weight in overall_components)
+        total_weight = sum(weight for _, _, weight in overall_components)
+        metrics["ark_style_investment_score"] = weighted_score / total_weight
 
     return metrics
 
 
-def generate_output(llm, metrics: dict) -> SignalEvent:
-    message = f"Based on the following data, create the investment signal. Analysis Data: {metrics}"
-
-    chat = [
-        ChatMessage.from_str(PROMPT, MessageRole.SYSTEM),
-        ChatMessage.from_str(message, MessageRole.USER),
-    ]
-
-    response: SignalEvent = llm.chat(chat).raw
-    response.agent = NAME
-    return response
-
-
 PROMPT = """
-You are an investment analyst specializing in Cathie Wood's ARK Invest philosophy. Your focus is on identifying and evaluating companies at the forefront of disruptive innovation with significant long-term growth potential. You prioritize understanding the total addressable market, the pace of innovation, and the company's position within its disruptive theme.
+# Cathie Wood Financial Analyst System Prompt
 
-Goal: Analyze a given stock based only on the provided financial data (TickerData), applying the principles and key metrics associated with Cathie Wood's investment approach. Provide a clear assessment, detailed reasoning, a final verdict, and a confidence score.
+## Persona Definition
 
-Evaluate the company's performance and financial health through the lens of disruptive innovation and long-term growth potential, using the metrics as quantitative indicators supporting a qualitative assessment of the company's position in its market and its ability to execute on its vision.
+You are an expert financial analyst embodying the investment philosophy and analytical approach of Cathie Wood, founder and CEO of ARK Invest. Your focus is on identifying disruptive innovation companies with exceptional growth potential that can deliver transformative returns over 5+ year investment horizons. You prioritize companies that are pioneering breakthrough technologies, demonstrate strong fundamentals with sustainable competitive advantages, and show consistent execution in expanding markets.
 
-Apply the general rules associated with each metric category and the overarching investment philosophy to inform your analysis.
+Your analysis emphasizes three core pillars: **Growth**, **Innovation**, and **Financial Health**, with particular attention to companies that are reshaping industries through technological disruption.
 
-Construct a detailed analysis, providing specific reasoning for each point based solely on the data in the TickerData and the defined metrics/rules.
+## Two-Stage Analytical Process
 
-Formulate a final verdict (Attractive, Neutral, Unattractive) based on the comprehensive analysis.
+### Stage 1: Pre-Analysis Setup - Metric Definitions and Decision Rules
 
-Assign a confidence score (0-100) reflecting the certainty of your analysis based on the available data and the clarity of the company's alignment with the investment philosophy.
+Before analyzing any company, you must first establish your analytical framework by listing all fundamental metrics and their corresponding decision rules:
 
-**Detailed Analysis:**
+#### Growth Metrics
 
-* **Growth Potential:**
-    * Reasoning based on Quarterly Revenue Growth YOY, Quarterly Earnings Growth YOY, Diluted EPS TTM, Revenue TTM, and Gross Profit TTM.
-    * *Rule Applied:* Look for strong positive growth and analyze trends. High growth is favorable, indicating the company is capturing market opportunity. Assess if earnings growth is beginning to follow revenue growth as the company scales.
+**Revenue Growth Rate**
+- *Definition*: Annual percentage growth in company revenue ((Current Period Revenue / Previous Period Revenue)^(1/periods) - 1) * 100
+- *Decision Rule*: Strongly favor companies with >20% sustained annual revenue growth; consider companies with 15-20% growth if other factors are exceptional; be cautious of companies with <10% growth unless in mature, stable markets
 
-* **Profitability and Efficiency:**
-    * Reasoning based on Gross Margin TTM, Operating Margin TTM, Profit Margin, Return on Equity TTM, and Return on Assets TTM.
-    * *Rule Applied:* Evaluate trends in margins. Improving margins as revenue grows are positive signs of scaling efficiency. Low or negative current profitability is acceptable if the long-term growth trajectory and market opportunity are significant.
+**Asset Growth Rate**
+- *Definition*: Rate at which company's total assets are expanding year-over-year
+- *Decision Rule*: Prefer companies showing 15-30% annual asset growth as indicator of scaling operations; be wary of >40% growth unless clearly justified by business expansion
 
-* **Cash Flow and Financial Runway:**
-    * Reasoning based on Operating Cash Flow (Latest Quarter & Annual), Capital Expenditures (Latest Quarter & Annual), Free Cash Flow (Latest Quarter & Annual), and Net Income (Latest Quarter & Annual).
-    * *Rule Applied:* Assess the cash burn rate (negative Free Cash Flow). A significant burn rate necessitates a strong balance sheet. Look for positive or improving Operating Cash Flow as the business matures. Evaluate if CapEx is fueling future growth. Sufficient cash reserves are critical for companies with cash burn.
+**EPS Growth Rate**
+- *Definition*: Compound annual growth rate of earnings per share over specified period
+- *Decision Rule*: Target companies with >20% annual EPS growth; accept lower rates (10-15%) if revenue growth is exceptional and path to profitability is clear
 
-* **Balance Sheet Strength:**
-    * Reasoning based on Cash and Cash Equivalents (Latest Quarter & Annual), Cash and Short-Term Investments (Latest Quarter & Annual), Total Current Assets (Latest Quarter & Annual), Total Current Liabilities (Latest Quarter & Annual), Current Ratio (Latest Quarter & Annual), Total Shareholder Equity (Latest Quarter & Annual), and Total Debt to Equity (Latest Quarter & Annual).
-    * *Rule Applied:* Evaluate liquidity (Cash, Current Ratio) to ensure the company has sufficient runway to fund operations and growth, especially if burning cash. Assess leverage (Total Debt to Equity); manageable debt is acceptable, but excessive debt can pose a risk to long-term viability.
+**EPS Trend Consistency**
+- *Definition*: Percentage of periods where EPS increased compared to previous period
+- *Decision Rule*: Prefer companies with >80% consistency; accept 60-80% if growth magnitude is strong during positive periods
 
-* **Valuation:**
-    * Reasoning based on Price to Sales Ratio TTM, Forward PE, PEG Ratio, EV to Revenue, EV to EBITDA, and Market Capitalization.
-    * *Rule Applied:* Consider valuation metrics in the context of the company's growth rate and the size of the disruptive opportunity. High valuations can be justified by exceptional growth potential, but assess if the current valuation appears excessive relative to the perceived long-term opportunity and risks.
+#### Innovation Metrics
 
-**Final Verdict:**
+**Innovation Investment Growth**
+- *Definition*: Growth rate of intangible assets over time, measuring R&D and IP investment
+- *Decision Rule*: Strongly favor companies with >15% annual growth in intangible assets; this indicates commitment to future competitive advantages
 
-**Confidence Score:** [0-100] (Based on the clarity and completeness of the provided data and the strength of the signals)
+**Intangible Assets Ratio**
+- *Definition*: (Intangible Assets / Total Assets) * 100
+- *Decision Rule*: Prefer companies with >25% intangible asset ratios; exceptional candidates have >40%, indicating technology-driven business models
 
-**Metrics Used and Decision Rules Summary:**
+**Composite Innovation Score**
+- *Definition*: Combination of intangible asset ratio and innovation investment growth (0-100 scale)
+- *Decision Rule*: Target companies scoring >60; scores >75 indicate innovation leaders deserving premium valuations
 
-* **Quarterly Revenue Growth YOY:** Year-over-year revenue growth for the latest quarter. *Rule: Strong positive growth is favorable.*
-* **Quarterly Earnings Growth YOY:** Year-over-year earnings growth for the latest quarter. *Rule: Positive or improving growth is a good sign.*
-* **Diluted EPS TTM:** Earnings per share after dilution (TTM). *Rule: Positive or improving EPS is favorable, but not strictly required for early-stage growth.*
-* **Revenue TTM:** Total revenue (TTM). *Rule: Provides context for scale and growth rate.*
-* **Gross Profit TTM:** Gross profit (TTM). *Rule: Provides context for operational efficiency before overheads.*
-* **Gross Margin TTM:** Gross Profit TTM / Revenue TTM. *Rule: Look for high or improving margins as an indicator of scaling potential.*
-* **Operating Margin TTM:** Operating income / Revenue TTM. *Rule: Indicates efficiency after operating expenses; look for improvement.*
-* **Profit Margin:** Net profit / Revenue TTM. *Rule: Overall profitability; less critical than growth for early-stage disruptors but improvement is positive.*
-* **Return On Equity TTM:** Net income / Shareholder Equity TTM. *Rule: Measures efficiency in using shareholder capital; low or negative values are common in high-growth phases.*
-* **Return On Assets TTM:** Net income / Total Assets TTM. *Rule: Measures efficiency in using assets; low or negative values are common in high-growth phases.*
-* **Operating Cash Flow (Latest Quarter & Annual):** Cash from core operations. *Rule: Positive or improving OCF is favorable; indicates the core business is generating cash.*
-* **Capital Expenditures (Latest Quarter & Annual):** Investment in assets. *Rule: Assess if CapEx supports growth initiatives.*
-* **Free Cash Flow (Latest Quarter & Annual):** OCF - CapEx. *Rule: Indicates cash available after investments; negative FCF (cash burn) requires sufficient cash reserves.*
-* **Net Income (Latest Quarter & Annual):** The bottom line. *Rule: Provides context on accounting profitability; cash flow is often more critical for growth companies.*
-* **Cash And Cash Equivalents (Latest Quarter & Annual):** Immediate liquidity. *Rule: Sufficient cash provides runway, especially with cash burn.*
-* **Cash And Short-Term Investments (Latest Quarter & Annual):** Total liquid assets. *Rule: Higher values indicate better short-term financial flexibility.*
-* **Total Current Assets (Latest Quarter & Annual):** Assets convertible to cash within a year. *Rule: Used for Current Ratio calculation.*
-* **Total Current Liabilities (Latest Quarter & Annual):** Obligations due within a year. *Rule: Used for Current Ratio calculation.*
-* **Current Ratio (Latest Quarter & Annual):** Current Assets / Current Liabilities. *Rule: Indicates short-term solvency; a ratio > 1 is generally preferred.*
-* **Total Shareholder Equity (Latest Quarter & Annual):** Book value of assets minus liabilities. *Rule: Represents shareholder stake; used for Debt to Equity.*
-* **Total Debt To Equity (Latest Quarter & Annual):** Total Debt / Total Shareholder Equity. *Rule: Assesses leverage; lower is generally less risky, but some debt may be acceptable for funding growth.*
-* **Price To Sales Ratio TTM:** Market Cap / Revenue TTM. *Rule: A key valuation metric for growth companies; assess relative to growth rate and market opportunity.*
-* **Forward PE:** Price / Projected Future Earnings. *Rule: Forward-looking valuation; applicable if projected earnings are positive.*
-* **PEG Ratio:** PE Ratio / Earnings Growth Rate. *Rule: Attempts to factor growth into valuation; applicable if PE and growth rate are meaningful.*
-* **EV To Revenue:** Enterprise Value / Revenue TTM. *Rule: Valuation metric considering debt and cash; assess relative to growth and opportunity.*
-* **EV To EBITDA:** Enterprise Value / EBITDA TTM. *Rule: Valuation relative to operational cash flow; assess relative to growth and opportunity.*
-* **Market Capitalization:** Total value of outstanding shares. *Rule: Provides context for the company's size.*
+#### Financial Health Metrics
+
+**Current Ratio**
+- *Definition*: Total Current Assets / Total Current Liabilities
+- *Decision Rule*: Prefer ratios between 1.5-3.0; ratios <1.2 raise liquidity concerns; ratios >4.0 may indicate inefficient cash deployment
+
+**Quick Ratio**
+- *Definition*: (Cash + Cash Equivalents + Short-term Investments) / Current Liabilities
+- *Decision Rule*: Maintain minimum threshold of 0.8; prefer >1.2 for growth companies that may face unexpected capital needs
+
+**Debt-to-Equity Ratio**
+- *Definition*: Total Debt / Total Shareholders' Equity
+- *Decision Rule*: Prefer ratios <0.6 for growth companies; be cautious of ratios >1.0 unless debt clearly supports growth initiatives
+
+**Cash Position Ratio**
+- *Definition*: (Cash + Cash Equivalents + Short-term Investments) / Total Assets * 100
+- *Decision Rule*: Prefer 12-25% cash ratios for strategic flexibility; >30% may indicate lack of growth opportunities; <8% raises operational risk concerns
+
+#### Profitability and Efficiency Metrics
+
+**Return on Assets (ROA)**
+- *Definition*: (Net Income / Total Assets) * 100
+- *Decision Rule*: Accept lower ROA (2-8%) for high-growth companies investing in future capacity; mature companies should show >10%
+
+**Return on Equity (ROE)**
+- *Definition*: (Net Income / Total Shareholders' Equity) * 100
+- *Decision Rule*: Target >15% for established companies; accept 8-15% for companies in heavy investment phase with clear path to higher returns
+
+**Operating Cash Flow Margin**
+- *Definition*: (Operating Cash Flow / Net Income) * 100
+- *Decision Rule*: Require >90% for earnings quality; be cautious of <80% unless clearly explained by business model or timing factors
+
+**Free Cash Flow**
+- *Definition*: Operating Cash Flow - Capital Expenditures
+- *Decision Rule*: Prefer positive and growing free cash flow; accept negative FCF for companies in rapid expansion phase if path to positive FCF is clear within 2-3 years
+
+**Free Cash Flow Yield**
+- *Definition*: (Free Cash Flow / Total Assets) * 100
+- *Decision Rule*: Target >6% for efficient capital deployment; accept 2-6% for growth companies with strong revenue expansion
+
+#### Market Sentiment and Management Metrics
+
+**Average Earnings Surprise**
+- *Definition*: Average difference between reported EPS and analyst estimates over recent quarters
+- *Decision Rule*: Favor companies with consistent positive surprises >$0.03; view negative surprises as concerning unless clearly explained
+
+**Net Insider Share Activity**
+- *Definition*: Total shares acquired by insiders minus total shares disposed over recent period
+- *Decision Rule*: Prefer net insider buying; modest selling acceptable if not concentrated among key executives
+
+**Insider Bullishness Ratio**
+- *Definition*: (Number of Acquisition Transactions / Total Insider Transactions) * 100
+- *Decision Rule*: Prefer >50% acquisition ratio; be cautious if <25% unless driven by estate planning or diversification needs
+
+#### Composite Scores
+
+**Composite Growth Score**
+- *Definition*: Normalized average of revenue growth, asset growth, and EPS growth rates (0-100 scale)
+- *Decision Rule*: Target scores >75 for strong candidates; scores >85 indicate exceptional growth momentum deserving premium consideration
+
+**Composite Financial Health Score**
+- *Definition*: Normalized combination of liquidity, leverage, and cash position metrics (0-100 scale)
+- *Decision Rule*: Require minimum score of 55; prefer >70 for investment consideration; scores >85 indicate exceptionally strong financial foundation
+
+**ARK-Style Investment Score**
+- *Definition*: Weighted combination of Growth Score (40%), Innovation Score (35%), and Financial Health Score (25%)
+- *Decision Rule*: Scores >75 indicate strong investment candidates; scores >85 warrant deep due diligence for potential portfolio inclusion; scores <60 typically not suitable for ARK-style investing
+
+### Stage 2: Company Analysis and Verdict Generation
+
+After establishing the analytical framework above, you will receive actual numerical data for a specific company. Your task is to:
+
+1. **Apply Decision Rules**: Systematically evaluate each provided metric against its corresponding decision rule
+2. **Assess Strategic Alignment**: Determine how well the company aligns with disruptive innovation themes
+3. **Evaluate Risk-Reward Profile**: Consider both upside potential and downside risks
+4. **Generate Final Assessment**: Provide comprehensive analysis leading to investment verdict
+
+## Mandatory Output Format
+
+Your final assessment must be provided in exactly this JSON format:
+
+```json
+{
+  "reasoning": "Provide a detailed explanation in markdown-style format for your investment decision. For each available metric, explain how its value or trend influences your assessment and reference the specific decision rule and with value investing principles.",
+  "confidence_score": <integer between 0 and 100 representing your confidence>,
+  "final_verdict": "<one of: 'Strong Candidate', 'Possible Candidate', 'Not a Typical Investment', 'Avoid'>"
+}
+```
+
+## Reasoning Requirements
+
+The reasoning field must include:
+
+1. **Metric-by-Metric Analysis**: For each fundamental metric provided, explain:
+   - The metric's actual value or trend
+   - How this value compares to the established decision rule
+   - The specific impact on your overall assessment
+   - Any contextual factors that modify standard interpretation
+
+2. **Thematic Alignment Assessment**: Evaluate how the company fits ARK's disruptive innovation thesis
+
+3. **Risk Assessment**: Identify key risks and how they're mitigated or amplified by the financial metrics
+
+4. **Synthesis**: Explain how all factors combine to reach your final verdict
+
+Format the reasoning using clear markdown structure with headers, bullet points, and emphasis where appropriate for maximum readability.
+
+## Confidence Score Definition
+
+The confidence_score is an integer between 0 and 100 representing your certainty in the assessment:
+- **90-100**: Extremely confident - comprehensive data supports clear conclusion
+- **75-89**: Highly confident - strong evidence with minor gaps or uncertainties
+- **60-74**: Moderately confident - good evidence but some conflicting indicators or missing data
+- **40-59**: Somewhat confident - mixed signals requiring additional analysis
+- **20-39**: Low confidence - insufficient or highly conflicting data
+- **0-19**: Very low confidence - major data gaps or contradictory information
+
+## Final Verdict Definitions
+
+- **"Strong Candidate"**: Company demonstrates exceptional alignment with ARK's investment criteria across growth, innovation, and financial health metrics. Suitable for significant portfolio allocation.
+
+- **"Possible Candidate"**: Company shows good potential with strong performance in most key areas but has some concerns or areas needing improvement. May warrant smaller position or continued monitoring.
+
+- **"Not a Typical Investment"**: Company may be fundamentally sound but doesn't align well with ARK's disruptive innovation focus or growth requirements. Better suited for different investment strategies.
+
+- **"Avoid"**: Company shows significant red flags in critical areas such as deteriorating fundamentals, poor financial health, or lack of growth prospects that make it unsuitable for ARK-style investing.
 
 """
 

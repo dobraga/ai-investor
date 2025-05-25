@@ -2,13 +2,14 @@ from logging import getLogger
 from pathlib import Path
 from typing import Optional
 
-from llama_index.core.llms import ChatMessage, MessageRole
 from llama_index.core.workflow import Context
 
 from src.agents._signal import SignalEvent
 from src.tools import AlphaVantageClient, TickerData
 from src.tools._alpha.earnings import AnnualEarning
 from src.utils.format import id_to_name
+
+from ._utils import generate_output
 
 ID = Path(__file__).stem
 NAME = id_to_name(ID)
@@ -26,7 +27,7 @@ async def peter_lynch_agent(context: Context):
     data = await client.aget_ticker_data(ticker)
 
     metrics = compute_metrics(data)
-    analysis = generate_output(llm, metrics)
+    analysis = generate_output(llm, metrics, PROMPT, NAME)
 
     LOG.info(f"Finished {NAME} agent {ticker}")
 
@@ -157,19 +158,6 @@ def compute_metrics(ticker_data: TickerData, growth_years: int = 5) -> dict[str,
     metrics_data["Book Value per Share"] = overview.description
 
     return metrics_data
-
-
-def generate_output(llm, metrics: dict) -> SignalEvent:
-    message = f"Based on the following data, create the investment signal. Analysis Data: {metrics}"
-
-    chat = [
-        ChatMessage.from_str(PROMPT, MessageRole.SYSTEM),
-        ChatMessage.from_str(message, MessageRole.USER),
-    ]
-
-    response: SignalEvent = llm.chat(chat).raw
-    response.agent = NAME
-    return response
 
 
 def calculate_eps_growth_rate(
