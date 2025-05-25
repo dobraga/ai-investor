@@ -2,7 +2,7 @@ from json import loads
 from pathlib import Path
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .balance_sheet import BalanceSheetResponse
 from .cash_flow import CashFlowResponse
@@ -14,11 +14,21 @@ __all__ = ["TickerData", "BalanceSheetResponse", "CashFlowResponse", "EarningsRe
 
 
 class TickerData(BaseModel):
-    overview: OverviewResponse
-    balance_sheet: BalanceSheetResponse
-    cash_flow: CashFlowResponse
-    earnings: EarningsResponse
-    insider_transactions: InsiderTransactionsResponse
+    overview: OverviewResponse = Field(
+        description="Company basic information and description"
+    )
+    balance_sheet: BalanceSheetResponse = Field(
+        description="Annual and quarterly balance sheet data"
+    )
+    cash_flow: CashFlowResponse = Field(
+        description="Annual and quarterly cash flow statements"
+    )
+    earnings: EarningsResponse = Field(
+        description="Annual and quarterly earnings reports"
+    )
+    insider_transactions: InsiderTransactionsResponse = Field(
+        description="Recent insider trading activity"
+    )
 
     def to_dict(self):
         return self.model_dump()

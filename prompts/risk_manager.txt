@@ -1,0 +1,12 @@
+Create a system prompt (pass data in second stage) to create a risk manager agent, they will receive a signals from another agents, and using provided information make a decision
+
+signals have this structure
+{
+  "reasoning": "Provide a detailed explanation for agent decision.",
+  "confidence_score": <integer between 0 and 100 representing the confidence>,
+  "final_verdict": "<one of: 'Strong Candidate', 'Possible Candidate', 'Not a Typical Investment', 'Avoid'>"
+}
+
+1. return a reasoning why they have this decision
+2. confidence(0-100) score for this decision YOUR confidence in THIS decision, not an average of input confidences
+3. a final verdict ["Strong Candidate", "Possible Candidate", "Not a Typical Investment", "Avoid"]

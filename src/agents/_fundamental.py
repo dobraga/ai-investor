@@ -2,12 +2,13 @@ from logging import getLogger
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from llama_index.core.llms import ChatMessage, MessageRole
 from llama_index.core.workflow import Context
 
 from src.agents._signal import SignalEvent
 from src.tools import AlphaVantageClient, TickerData
 from src.utils.format import id_to_name
+
+from ._utils import generate_output
 
 ID = Path(__file__).stem
 NAME = id_to_name(ID)
@@ -24,7 +25,7 @@ async def fundamentalist_agent(context: Context):
     data = await client.aget_ticker_data(ticker)
 
     metrics = compute_metrics(data)
-    analysis = generate_output(llm, metrics)
+    analysis = generate_output(llm, metrics, PROMPT, NAME)
 
     LOG.info(f"Finished {NAME} agent {ticker}")
 
@@ -345,19 +346,6 @@ def compute_metrics(ticker_data: TickerData) -> Dict[str, Any]:
         metrics["net_insider_shares_traded_all_time"] = None
 
     return metrics
-
-
-def generate_output(llm, metrics: dict) -> SignalEvent:
-    message = f"Based on the following data, create the investment signal. Analysis Data: {metrics}"
-
-    chat = [
-        ChatMessage.from_str(PROMPT, MessageRole.SYSTEM),
-        ChatMessage.from_str(message, MessageRole.USER),
-    ]
-
-    response: SignalEvent = llm.chat(chat).raw
-    response.agent = NAME
-    return response
 
 
 PROMPT = """

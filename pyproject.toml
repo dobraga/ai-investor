@@ -10,6 +10,7 @@ dependencies = [
     "llama-index>=0.12.34",
     "llama-index-llms-google-genai>=0.1.12",
     "tyro>=0.9.20",
+    "markdown2",
 ]
 
 [build-system]
