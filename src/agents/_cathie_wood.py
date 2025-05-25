@@ -53,6 +53,12 @@ def compute_metrics(
             return default
         return numerator / denominator
 
+    def safe_percentage(numerator, denominator, default=None):
+        """Safe percentage calculation with None handling"""
+        if numerator is None or denominator is None or denominator == 0:
+            return default
+        return numerator / denominator * 100
+
     def safe_subtract(a, b, default=None):
         """Safe subtraction with None handling"""
         if a is None or b is None:
@@ -198,17 +204,17 @@ def compute_metrics(
     # Return on Assets (ROA)
     if latest_cash_flow and latest_cash_flow.net_income:
         roa = (
-            safe_divide(latest_cash_flow.net_income, latest_balance.total_assets) * 100
+            safe_percentage(latest_cash_flow.net_income, latest_balance.total_assets)
+            
         )
         metrics["return_on_assets"] = roa
 
     # Return on Equity (ROE)
     if latest_cash_flow and latest_cash_flow.net_income:
         roe = (
-            safe_divide(
+            safe_percentage(
                 latest_cash_flow.net_income, latest_balance.total_shareholder_equity
             )
-            * 100
         )
         metrics["return_on_equity"] = roe
 
@@ -218,10 +224,9 @@ def compute_metrics(
         # Operating Cash Flow Margin
         if latest_cash_flow.operating_cashflow and latest_cash_flow.net_income:
             ocf_margin = (
-                safe_divide(
+                safe_percentage(
                     latest_cash_flow.operating_cashflow, latest_cash_flow.net_income
                 )
-                * 100
             )
             metrics["operating_cash_flow_margin"] = ocf_margin
 
@@ -238,7 +243,7 @@ def compute_metrics(
             # Free Cash Flow Yield
             if latest_balance.total_assets:
                 fcf_yield = (
-                    safe_divide(free_cash_flow, latest_balance.total_assets) * 100
+                    safe_percentage(free_cash_flow, latest_balance.total_assets)
                 )
                 metrics["free_cash_flow_yield"] = fcf_yield
 
@@ -260,7 +265,7 @@ def compute_metrics(
     total_cash = (latest_balance.cash_and_cash_equivalents_at_carrying_value or 0) + (
         latest_balance.cash_and_short_term_investments or 0
     )
-    cash_to_assets = safe_divide(total_cash, latest_balance.total_assets) * 100
+    cash_to_assets = safe_percentage(total_cash, latest_balance.total_assets) 
     metrics["cash_position_ratio"] = cash_to_assets
 
     # Working Capital
@@ -271,7 +276,7 @@ def compute_metrics(
 
     # Working Capital Ratio
     working_capital_ratio = (
-        safe_divide(working_capital, latest_balance.total_assets) * 100
+        safe_percentage(working_capital, latest_balance.total_assets) 
     )
     metrics["working_capital_ratio"] = working_capital_ratio
 
@@ -279,13 +284,14 @@ def compute_metrics(
 
     # Intangible Asset Ratio (Key for tech/innovation companies)
     intangible_ratio = (
-        safe_divide(latest_balance.intangible_assets, latest_balance.total_assets) * 100
+        safe_percentage(latest_balance.intangible_assets, latest_balance.total_assets)
+        
     )
     metrics["intangible_assets_ratio"] = intangible_ratio
 
     # Goodwill Ratio
     goodwill_ratio = (
-        safe_divide(latest_balance.goodwill, latest_balance.total_assets) * 100
+        safe_percentage(latest_balance.goodwill, latest_balance.total_assets) 
     )
     metrics["goodwill_ratio"] = goodwill_ratio
 

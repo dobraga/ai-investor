@@ -413,9 +413,13 @@ def compute_metrics(
         net_activity = 0
         transaction_count = 0
 
+        last_price = ticker_data.overview.two_hundred_day_moving_average
         for transaction in insider_data:
             if transaction.transaction_date >= six_months_ago:
-                transaction_value = transaction.shares * transaction.share_price
+                if transaction.share_price is not None:
+                    last_price = transaction.share_price
+
+                transaction_value = transaction.shares * last_price
                 if transaction.acquisition_or_disposal == "A":
                     net_activity += transaction_value
                 else:
