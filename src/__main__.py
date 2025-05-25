@@ -19,6 +19,14 @@ from src.agents import (
 from src.config import Config
 from src.tools import AlphaVantageClient
 
+ALL_AGENTS = [
+    warren_buffett_agent,
+    ray_dalio_agent,
+    peter_lynch_agent,
+    cathie_wood_agent,
+    fundamentalist_agent,
+]
+
 
 class StartAgentEvent(Event):
     agent_fn: Callable
@@ -42,19 +50,12 @@ class Workflow(BaseWorkflow):
         await ctx.set("alpha_client", alpha_client)
         await ctx.set("ticker", ev.ticker)
 
-        agents_to_run = [
-            warren_buffett_agent,
-            ray_dalio_agent,
-            peter_lynch_agent,
-            cathie_wood_agent,
-            fundamentalist_agent,
-        ]
-        await ctx.set("num_agents", len(agents_to_run))
+        await ctx.set("num_agents", len(ALL_AGENTS))
 
-        for fn in agents_to_run:
+        for fn in ALL_AGENTS:
             ctx.send_event(StartAgentEvent(agent_fn=fn, ticker=ev.ticker))
 
-    @step(num_workers=4)
+    @step(num_workers=len(ALL_AGENTS))
     async def run_agent(self, ctx: Context, ev: StartAgentEvent) -> SignalEvent:
         result = await ev.agent_fn(ctx)
         return result
@@ -137,16 +138,17 @@ if __name__ == "__main__":
 
     @dataclass
     class Args:
-        ticker: str = "IBM"  # ticker
+        tickers: list[str] = field(default_factory=lambda: ["IBM"])  # tickers
         config: Config = field(default_factory=Config)  # config
 
     args = tyro.cli(Args)
     args.config.log.basic_config()
 
     async def run():
-        wf = Workflow()
-        result = await wf.run(ticker=args.ticker, config=args.config)
-        return result
+        wf = Workflow(timeout=10 * 60)
+        for ticker in args.tickers:
+            result = await wf.run(ticker=ticker, config=args.config)
+            print(ticker)
+            print(result)
 
     result = asyncio.run(run())
-    print(result)
