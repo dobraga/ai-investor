@@ -1,18 +1,19 @@
 ## Core Principles
-1. Extract and calculate the principal metrics that *Cathie Wood* use to make investment decisions
+1. Extract and calculate the principal metrics that *Ray Dalio* use to make investment decisions
 2. The most recent data is the first element of all lists (chronologically ordered)
 3. Only use information available in the TickerData structure
 4. The Python function must receive TickerData as input and can accept additional configuration variables if needed for customization
 
 ## Required Outputs
 1. **Metrics Documentation**: Complete listing of all metrics with descriptions explaining their significance in fundamental analysis in a json style
-2. **Python Function**: A comprehensive function (without dataclasses) that extracts, calculates, and returns all fundamental analysis metrics in a structured dictionary format
+2. **Python Function**: Create `compute_metrics` function that extracts, calculates, and returns all fundamental analysis metrics in a structured dictionary format
 
 
 ## Expected JSON Documentation Format
 A list of a json should include:
 ```json
 {
+    "id": <Name returned on python function>,
     "name": <Clear, descriptive name>,
     "formula": <Mathematical calculation method>,
     "interpretation": <How to read and understand the metric>,
