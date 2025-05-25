@@ -1,20 +1,66 @@
-0. Get the principal metrics fundamentalist analysist uses to make a decision
-1. The most recent data is first element of lists.
-2. Only uses information on TickerData
-3. The python function need to receive TickerData
-4. The python function can receive more config variables if needed
+## Core Principles
+1. Extract and calculate the principal metrics that *Cathie Wood* use to make investment decisions
+2. The most recent data is the first element of all lists (chronologically ordered)
+3. Only use information available in the TickerData structure
+4. The Python function must receive TickerData as input and can accept additional configuration variables if needed for customization
 
-Only Return:
-1. a python function (without dataclasses) to get and create all information used to make a decision and returns a dict
-2. json with metrics and description used to make a decision
+## Required Outputs
+1. **Metrics Documentation**: Complete listing of all metrics with descriptions explaining their significance in fundamental analysis in a json style
+2. **Python Function**: A comprehensive function (without dataclasses) that extracts, calculates, and returns all fundamental analysis metrics in a structured dictionary format
 
 
+## Expected JSON Documentation Format
+A list of a json should include:
+```json
+{
+    "name": <Clear, descriptive name>,
+    "formula": <Mathematical calculation method>,
+    "interpretation": <How to read and understand the metric>,
+    "significance": <Why this metric matters for investment decisions>,
+    "benchmarks": <Typical good/bad ranges when applicable>,
+    "limitations": <What the metric doesn't tell you>
+}
+```
+
+### Quality Standards
+- All calculations must be mathematically accurate
+- Include error handling for edge cases
+- Provide clear variable names and inline comments
+- Ensure reproducible results
+- Include data freshness indicators (fiscal date endings)
+
+### Advanced Features
+- Calculate percentile rankings where applicable
+- Provide industry-relative context when possible
+- Include confidence indicators for data quality
+- Support both annual and quarterly analysis timeframes
+- Generate composite scores for overall financial health
+
+## Performance Considerations
+- Optimize for computational efficiency
+- Minimize redundant calculations
+- Use vectorized operations where possible
+- Cache intermediate results for complex calculations
+- Ensure scalability for multiple ticker analysis
+
+
+```python
 class TickerData(BaseModel):
-    overview: OverviewResponse
-    balance_sheet: BalanceSheetResponse
-    cash_flow: CashFlowResponse
-    earnings: EarningsResponse
-    insider_transactions: InsiderTransactionsResponse
+    overview: OverviewResponse = Field(
+        description="Company basic information and description"
+    )
+    balance_sheet: BalanceSheetResponse = Field(
+        description="Annual and quarterly balance sheet data"
+    )
+    cash_flow: CashFlowResponse = Field(
+        description="Annual and quarterly cash flow statements"
+    )
+    earnings: EarningsResponse = Field(
+        description="Annual and quarterly earnings reports"
+    )
+    insider_transactions: InsiderTransactionsResponse = Field(
+        description="Recent insider trading activity"
+    )
 
 class OverviewResponse(BaseModel):
     asset_type: Optional[str] = Field(
@@ -582,4 +628,4 @@ class InsiderTransactionsResponse(BaseModel):
         alias="data",
         description="List of insider transactions",
     )
-
+```
