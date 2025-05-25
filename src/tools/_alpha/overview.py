@@ -209,6 +209,8 @@ class OverviewResponse(BaseModel):
         "quarterly_revenue_growth_yoy",
         "shares_outstanding",
         "beta",
+        "dividend_date",
+        "ex_dividend_date",
         mode="before",
     )
     @classmethod
