@@ -72,7 +72,7 @@ class Workflow(BaseWorkflow):
         results = [risk_manager_agent_result] + results
 
         html_content = generate_html_output(results)
-        with open(f"signal_events_{ticker}.html", "w") as f:
+        with open(f"docs/signal_events_{ticker}.html", "w") as f:
             f.write(html_content)
 
         combined_result = {event.agent: event.final_verdict for event in results}
